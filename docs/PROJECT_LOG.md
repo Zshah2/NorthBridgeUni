@@ -6,6 +6,20 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — Git: initial push to GitHub
+
+**Goal:** Version the project on GitHub (`NorthBridge`, private remote).
+
+**Changes**
+
+| Area | Detail |
+|------|--------|
+| Repository | Initialized git in project root (replaced incomplete `.git` from an earlier partial init), first commit on `main`, remote `origin` → `https://github.com/Zshah2/NorthBridge.git`, pushed `main`. |
+
+**Note:** Set `git config user.name` / `user.email` if you want commits attributed to your GitHub identity instead of the machine default.
+
+---
+
 ## 2026-04-22 — Department emails: Northbridge branding
 
 **Goal:** Remove the synthetic `@boolean.edu` domain from demo data so nothing in the repo reads “boolean” for school contact email.
