@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+
+# Env / secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# PHP dependencies (if added later)
+vendor/
+
+# OS / editor temp
+*.swp
+*.swo
+*~

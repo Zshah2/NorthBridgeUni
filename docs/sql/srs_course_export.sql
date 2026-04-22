@@ -1,0 +1,14 @@
+-- =============================================================================
+-- SRS / course database (PRIMARY SOURCE for your project DB)
+-- =============================================================================
+-- Paste your full MySQL export here: CREATE TABLE, INSERT, indexes, etc.
+-- This file is what you apply so the database matches class/SRS while you
+-- build the website (PHP reads these tables once we align queries).
+--
+-- Apply (after: CREATE DATABASE ...; and matching DB_NAME):
+--   ./scripts/apply_srs_database.sh
+--   (set DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS — see docs/SQL_NOTES.md)
+--
+-- Optional: split into srs_schema.sql + srs_sample_data.sql and concat when
+-- applying, or keep one file for simplicity.
+-- =============================================================================

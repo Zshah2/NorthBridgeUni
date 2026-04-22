@@ -1,0 +1,824 @@
+# CollegeWeb — Student use cases
+
+This file is **generated from** `Data/student_data_vertical - student_data_vertical.csv`. Regenerate with: `python3 scripts/build_use_cases_from_vertical_csv.py`
+
+For Google Docs, use **`docs/USE_CASES_GOOGLE_DOC.txt`**.
+
+For database / SRS SQL notes, see **`docs/SQL_NOTES.md`**.
+
+---
+
+Name:
+Add a course-section
+
+Actors:
+Student
+
+Initial Condition:
+User logs to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Registration"  Navigate to "Course Registration"  Select appropriate Semester for registration  Select "Course Search"  View Master Schedule  Select "Add" on a Course  Register for Course
+
+Exit Condition:
+User logs out of account
+
+---
+
+Name:
+Add a major
+
+Actors:
+Student
+
+Initial Condition:
+User logs to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Registration"  Navigate to "Program Enrollment"  Select one or more Programs  Add Major/Minor  Add Advisor to Student  Save Changes
+
+Exit Condition:
+User logs out of account
+
+---
+
+Name:
+Add a minor
+
+Actors:
+Student
+
+Initial Condition:
+User logs to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Registration"  Navigate to "Program Enrollment"  Select one or more Programs  Add Major/Minor  Add Advisor to Student  Save Changes
+
+Exit Condition:
+User logs out of account
+
+---
+
+Name:
+Change major
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Login
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Reset password
+
+Actors:
+Student
+
+Initial Condition:
+User logs in with Student Credentials
+
+Basic Flow:
+From the Student home page, navigate to "Account"  Make necessary changes to password  Save updates
+
+Exit Condition:
+Administrator makes change to personal password
+
+---
+
+Name:
+Search for advisor information
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Search for prerequisites of a course
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successful login
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successful password reset
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successfully add a course-section
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successfully add a major
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successfully add a minor
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successfully search for advisor information
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Successfully search for prerequisites of a course
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a course-section due to already taken course
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a course-section due to exceeding credit limits
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a course-section due to holds
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a course-section due to missing prerequisites
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a course-section due to time conflict
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a course-section due to undergrad/grad mismatch
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a major because student already has a major
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a major because trying to add more than 2 majors
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a minor because student already has a minor
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful adding a minor because trying to add same minor twice
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful changing major from grad to grad
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful changing major from undergrad to grad
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful login
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+Unsuccessful searching for prerequisites
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View Academics Page
+
+Actors:
+Student
+
+Initial Condition:
+1. User logs in to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Academics Page"
+
+Exit Condition:
+
+
+---
+
+Name:
+View Advisor
+
+Actors:
+Student
+
+Initial Condition:
+User logs in to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, navigate to "View the Advisement Page"  View Advisor
+
+Exit Condition:
+
+
+---
+
+Name:
+View course requirements for a major
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View course requirements for minors
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View courses by department
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View degree audit
+
+Actors:
+Student
+
+Initial Condition:
+User logs in to website with Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Academics"  Navigate to "Degree Audit"  View Degree Audit
+
+Exit Condition:
+User logs out of account
+
+---
+
+Name:
+View departments
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View Holds
+
+Actors:
+Student
+
+Initial Condition:
+2. User logs in to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Registration"  Navigate to "Holds"  View Holds
+
+Exit Condition:
+
+
+---
+
+Name:
+View majors by department
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View minors by department
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View Registration Page
+
+Actors:
+Student
+
+Initial Condition:
+User logs in to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Registration"  View Registration Page
+
+Exit Condition:
+
+
+---
+
+Name:
+View semester master schedule by available seats
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View semester master schedule by building/room number
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View semester master schedule by course name
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View semester master schedule by department
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View semester master schedule by faculty name
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View semester master schedule by time slot
+
+Actors:
+Student
+
+Initial Condition:
+TBD
+
+Basic Flow:
+TBD
+
+Exit Condition:
+TBD
+
+---
+
+Name:
+View student information
+
+Actors:
+Student
+
+Initial Condition:
+User logs in to website using Student Credentials
+
+Basic Flow:
+When Student logs on, the landing page is the Profile  Navigate through "About" component  Inspect personal information
+
+Exit Condition:
+User logs out of account
+
+---
+
+Name:
+View unofficial transcript
+
+Actors:
+Student
+
+Initial Condition:
+User logs in to website using Student Credentials
+
+Basic Flow:
+From the Student Home Page, Navigate to "Academics"  Navigate to "Unofficial Transcript"  View Unofficial Transcript
+
+Exit Condition:
+User logs out of account
+

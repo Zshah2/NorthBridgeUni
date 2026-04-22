@@ -1,0 +1,11 @@
+/* Keep custom CSS minimal; Tailwind handles most styling. */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Slightly nicer focus ring for keyboard users on dark UI */
+:focus-visible {
+  outline: none;
+}
+

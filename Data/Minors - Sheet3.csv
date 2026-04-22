@@ -1,0 +1,21 @@
+,,SM1,SM2,SM3,SM4,,old_min,Minor ID,Full Name,Dept Code,
+FRESHMEN,PARTTIME,8,16,24,32,,BUSmin,MBUS-BUS,in Business,BUS,BUS
+FRESHMEN,FULLTIME,16,32,-,-,,CSmin,MCIS-CSc,in Computer Science,CIS,CSc
+SOPHMORE,PARTTIME,40,48,56,64,,DSAmin,MDSC-DAN,in Data Analytics,DSC,DAN
+SOPHMORE,FULLTIME,48,64,-,-,,DScmin,MCIS-DSci,in Data Science,CIS,DSci
+JUNIOR,PARTTIME,72,80,88,96,,ECONmin,MECO-ECO,in Economics,ECO,ECO
+JUNIOR,FULLTIME,80,96,-,-,,EDUmin,MEDU-EDU,in Education,EDU,EDU
+SENIOR,PARTTIME,104,112,120,128,,HISmin,MHIS-HIS,in History,HIS,HIS
+SENIOR,FULLTIME,112,128,-,-,,MATmin,MMAT-MAT,in Mathematics,MAT,MAT
+,,,,,,,mEthics,MPHI-ETH,in Ethics,PHI,ETH
+,,,,,,,minBioChem,MCHE-BCHE,in Biochemistry,CHE,BCHE
+First semester completed if current semester is SP26,,,,,,,minEng,MMEN-MEN,in Mechanical Engineering,MEN,MEN
+YEAR,TYPE,SM1,SM2,SM3,SM4,,minIR,MPOL-INR,in International Relations,POL,INR
+Freshmen,Part-time,SP26,FA25,SP25,FA24,,minMBio,MBIO-MoB,in Molecular Biology,BIO,MoB
+Freshmen,Full-time,SP26,FA25,–,–,,minPsy,MPSY-CSc,in Cognitive Science,PSY,CSc
+Sophomore,Part-time,SP24,FA23,SP23,FA22,,minRob,MEEN-ROB,in Robotics,EEN,ROB
+Sophomore,Full-time,SP25,FA24,–,–,,minSoc,MSOC-SoW,in Social Work,SOC,SoW
+Junior,Part-time,SP22,FA21,SP21,FA20,,minSSt,MCEN-SUS,in Sustainability Studies,CEN,SUS
+Junior,Full-time,SP24,FA23,–,–,,PHYmin,MPHY-PHY,in Physics,PHY,PHY
+Senior,Part-time,SP20,FA19,SP19,FA18,,,,,,
+Senior,Full-time,SP23,FA22,–,–,,,,,,
