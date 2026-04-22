@@ -6,6 +6,14 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — Avoid “404” with no PHP (router + .htaccess)
+
+**Problem:** If the web server never runs `index.php` for `/login`, you get the server’s hard **404** (not the app’s styled page).
+
+**Changes:** [public/router.php](../public/router.php) for `php -S … -t public public/router.php`; [public/.htaccess](../public/.htaccess) for Apache rewrite to `index.php`. README run instructions updated. [app/views/pages/404.php](../app/views/pages/404.php) copy softened (“This page isn’t here”).
+
+---
+
 ## 2026-04-22 — Router path normalization + home CTA
 
 **Changes:** [public/index.php](public/index.php) — normalize backslashes in `REQUEST_URI` path and `SCRIPT_NAME`; extra strip when path still contains `/index.php/`; comment pointing to [app/routes.php](app/routes.php). [app/views/pages/home.php](app/views/pages/home.php) — hero “Apply” CTA uses `nav_url()` like the navbar.

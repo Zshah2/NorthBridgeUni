@@ -46,13 +46,15 @@ php scripts/smoke_check.php http://127.0.0.1:8000
 - PHP 8+ (7.4+ usually works, but 8+ recommended)
 
 ### Run locally (built-in PHP server)
-From the project root:
+From the project root, use the **router script** so paths like `/login` reach `index.php` (otherwise you can get a real server “404” with no PHP page):
 
 ```bash
-php -S localhost:8000 -t public
+php -S localhost:8000 -t public public/router.php
 ```
 
-Then open `http://localhost:8000`.
+Then open `http://localhost:8000/login` etc.
+
+**Apache:** [public/.htaccess](public/.htaccess) sends unknown paths to `index.php` when `mod_rewrite` is enabled and `AllowOverride` permits it.
 
 If you open the site as a **subpath** (for example `http://localhost:8000/public/` or PhpStorm’s `.../public/index.php` URL), links and redirects use an automatic **base path** from `SCRIPT_NAME`. You can override it with `APP_BASE_PATH` (no trailing slash), e.g. `export APP_BASE_PATH=/CollegWeb/public`.
 

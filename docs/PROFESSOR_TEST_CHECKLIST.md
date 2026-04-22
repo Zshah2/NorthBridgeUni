@@ -8,7 +8,7 @@ php scripts/migrate.php
 php scripts/seed_admin.php admin YourSecurePass123
 php scripts/import_all.php
 php scripts/seed_demo_registration.php
-php -S 127.0.0.1:8000 -t public
+php -S 127.0.0.1:8000 -t public public/router.php
 ```
 
 Optional pre-flight:
@@ -74,6 +74,6 @@ Set `APP_DEBUG=0` (or unset) when demonstrating so errors stay user-safe. Use `A
 |-----------|-----------|
 | MySQL stopped | `/health` reports failure; first DB page may show generic error page (not raw stack trace) when `APP_DEBUG=0`. |
 | Wrong CSRF | 403 text: session/token message. |
-| Not found route | 404 page with “Page not found”, current path, links to Home and Staff login. |
+| Not found route | App 404 view (“This page isn’t here”), current path, links to Home and Staff login. |
 
 If anything **white-screens**, turns on a PHP **notice/warning**, or shows a **stack trace** during these steps with `APP_DEBUG=0`, treat that as a release blocker.

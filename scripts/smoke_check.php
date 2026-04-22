@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Quick HTTP smoke test (run server first: php -S 127.0.0.1:8000 -t public).
+ * Quick HTTP smoke test (run server first: php -S 127.0.0.1:8000 -t public public/router.php).
  *
  *   php scripts/smoke_check.php http://127.0.0.1:8000
  */

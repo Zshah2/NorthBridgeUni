@@ -84,6 +84,8 @@ The site entry point is [public/index.php](../public/index.php). Point the virtu
 
 Example (conceptual): `DocumentRoot /var/www/collegeweb/public`
 
+Enable **URL rewriting** to `public/index.php` for any path that is not a real file (see [public/.htaccess](../public/.htaccess) for Apache). Without that, `/login` may return the web server’s own “404” and never run PHP.
+
 **PhpStorm / JetBrains** (`http://localhost:63342/...`): the IDE’s built-in server usually does **not** map `/your/project/public/login` to `index.php`, so PHP never runs for that URL. Prefer `php -S localhost:8000 -t public` from [README.md](../README.md), or use links like `/your/project/public/index.php/login`. This repo auto-uses `index.php/...` links when the host contains `:63342`; see README for `APP_USE_INDEX_PHP_LINKS`.
 
 ---
