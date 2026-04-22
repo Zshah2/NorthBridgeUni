@@ -6,6 +6,12 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — Router path normalization + home CTA
+
+**Changes:** [public/index.php](public/index.php) — normalize backslashes in `REQUEST_URI` path and `SCRIPT_NAME`; extra strip when path still contains `/index.php/`; comment pointing to [app/routes.php](app/routes.php). [app/views/pages/home.php](app/views/pages/home.php) — hero “Apply” CTA uses `nav_url()` like the navbar.
+
+---
+
 ## 2026-04-22 — PhpStorm :63342 and `/public/login`
 
 **Problem:** JetBrains’ built-in server (`http://localhost:63342/...`) does not rewrite `/CollegWeb/public/login` to `index.php`, so PHP routing never runs.

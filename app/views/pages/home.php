@@ -25,7 +25,7 @@
         </p>
 
         <div class="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <a href="<?= htmlspecialchars($app['cta']['primary']['href']) ?>" class="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60">
+          <a href="<?= htmlspecialchars(nav_url($app['cta']['primary']['href'])) ?>" class="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60">
             <?= htmlspecialchars($app['cta']['primary']['label']) ?>
           </a>
           <a href="#programs" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/10">

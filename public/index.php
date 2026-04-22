@@ -19,8 +19,15 @@ $routes = require __DIR__ . '/../app/routes.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+$path = str_replace('\\', '/', (string)$path);
 
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+$scriptName = str_replace('\\', '/', (string)$scriptName);
+
+/*
+ * Valid app paths are defined in app/routes.php (GET/POST + path). After normalization below,
+ * $path must match those literals (e.g. /login, /admin/students/show) for a route to run.
+ */
 if (is_string($scriptName) && $scriptName !== '' && str_starts_with($path, $scriptName)) {
     $path = substr($path, strlen($scriptName));
     $path = $path === '' ? '/' : $path;
@@ -41,6 +48,15 @@ if ($path === '/index.php' || $path === '/public/index.php') {
     $path = substr($path, strlen('/index.php'));
 } elseif (str_starts_with($path, '/public/index.php/')) {
     $path = substr($path, strlen('/public/index.php'));
+}
+
+// e.g. /project/public/index.php/login → /login if earlier steps left /index.php/...
+if (str_contains($path, '/index.php/')) {
+    $pos = strpos($path, '/index.php/');
+    $path = substr($path, $pos + strlen('/index.php'));
+    if ($path === '') {
+        $path = '/';
+    }
 }
 
 if ($path !== '/' && str_ends_with($path, '/')) {
