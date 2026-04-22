@@ -6,6 +6,21 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — Login link / subpath routing
+
+**Problem:** Navbar **Login** used `href="/login"`, which goes to the **server root**, not the app folder when the site runs under a subpath (e.g. `.../public/`). Same for CSS/JS `/assets/...` and form `action` attributes.
+
+**Changes**
+
+| Area | Detail |
+|------|--------|
+| [app/lib/url.php](app/lib/url.php) | New `app_base_path()`, `url()`, `nav_url()` (optional `APP_BASE_PATH` override). |
+| [public/index.php](public/index.php) | Strip `dirname(SCRIPT_NAME)` from the request path so `/public/login` matches the `/login` route. |
+| Views / layout | All internal `href` / `action` and asset URLs go through `url()` or `nav_url()`. |
+| [app/lib/auth.php](app/lib/auth.php), [app/controllers.php](app/controllers.php), [app/lib/csrf.php](app/lib/csrf.php) | Redirects / CSRF recovery link use `url()`. |
+
+---
+
 ## 2026-04-22 — Styled 404 (unknown routes)
 
 **Goal:** Unknown URLs were always `404` with plain text `Not found.` — correct behavior, but not obvious what went wrong.

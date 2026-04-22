@@ -13,8 +13,8 @@
         Valid staff URLs include <code class="text-sky-200/90">/login</code>, <code class="text-sky-200/90">/admin</code>, and paths under <code class="text-sky-200/90">/admin/…</code>.
       </p>
       <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-        <a class="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400" href="/">Home</a>
-        <a class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/10" href="/login">Staff login</a>
+        <a class="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400" href="<?= htmlspecialchars(url('/')) ?>">Home</a>
+        <a class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/10" href="<?= htmlspecialchars(url('/login')) ?>">Staff login</a>
       </div>
     </div>
   </div>

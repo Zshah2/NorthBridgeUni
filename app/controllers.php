@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 function redirect(string $to): void
 {
+    if ($to !== '' && !preg_match('#^[a-z][a-z0-9+.-]*://#i', $to) && str_starts_with($to, '/')) {
+        $to = url($to);
+    }
     header('Location: ' . $to);
     exit;
 }

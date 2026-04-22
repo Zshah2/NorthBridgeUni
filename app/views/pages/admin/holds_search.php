@@ -28,7 +28,7 @@ $msg = match ($err) {
     <?php endif; ?>
 
     <div class="mt-8 max-w-xl rounded-3xl border border-white/10 bg-white/5 p-6">
-      <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="get" action="/admin/holds/show">
+      <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="get" action="<?= htmlspecialchars(url('/admin/holds/show')) ?>">
         <div class="flex-1">
           <label class="block text-sm font-medium text-slate-200" for="student_id">Student ID</label>
           <input

@@ -13,7 +13,7 @@
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Dashboard</h1>
         <p class="mt-2 max-w-2xl text-sm text-slate-300">Search students and view enrollment data directly from MySQL.</p>
       </div>
-      <form method="post" action="/admin/logout">
+      <form method="post" action="<?= htmlspecialchars(url('/admin/logout')) ?>">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
         <button class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-white/10" type="submit">
           Logout
@@ -22,17 +22,17 @@
     </div>
 
     <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="/admin/students/search">
+      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="<?= htmlspecialchars(url('/admin/students/search')) ?>">
         <div class="text-base font-semibold text-white">Student lookup</div>
         <div class="mt-1 text-sm text-slate-300">Search by student_id and view live enrollments.</div>
         <div class="mt-4 text-sm font-semibold text-sky-200">Open →</div>
       </a>
-      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="/admin/schedule">
+      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="<?= htmlspecialchars(url('/admin/schedule')) ?>">
         <div class="text-base font-semibold text-white">Master schedule</div>
         <div class="mt-1 text-sm text-slate-300">Browse sections by term and department filter.</div>
         <div class="mt-4 text-sm font-semibold text-sky-200">Open →</div>
       </a>
-      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="/admin/holds">
+      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="<?= htmlspecialchars(url('/admin/holds')) ?>">
         <div class="text-base font-semibold text-white">Student holds</div>
         <div class="mt-1 text-sm text-slate-300">Add or clear registration holds by student_id.</div>
         <div class="mt-4 text-sm font-semibold text-sky-200">Open →</div>

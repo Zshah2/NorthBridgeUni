@@ -17,7 +17,7 @@
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Student detail</h1>
         <p class="mt-2 max-w-2xl text-sm text-slate-300">Live data from MySQL.</p>
       </div>
-      <a class="text-sm font-semibold text-slate-200 hover:text-white" href="/admin/students/search">New search →</a>
+      <a class="text-sm font-semibold text-slate-200 hover:text-white" href="<?= htmlspecialchars(url('/admin/students/search')) ?>">New search →</a>
     </div>
 
     <div class="mt-8 grid gap-4 lg:grid-cols-12">
@@ -51,7 +51,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="text-sm font-semibold text-white">Holds</div>
             <?php if ($student && ctype_digit((string)$student_id)): ?>
-              <a class="text-xs font-semibold text-sky-200 hover:text-sky-100" href="/admin/holds/show?student_id=<?= htmlspecialchars($student_id) ?>">Manage →</a>
+              <a class="text-xs font-semibold text-sky-200 hover:text-sky-100" href="<?= htmlspecialchars(url('/admin/holds/show?student_id=' . rawurlencode($student_id))) ?>">Manage →</a>
             <?php endif; ?>
           </div>
           <div class="mt-4 space-y-2">

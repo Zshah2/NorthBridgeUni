@@ -18,7 +18,7 @@
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Holds for student</h1>
         <p class="mt-2 text-sm text-slate-300">ID: <span class="font-mono text-sky-200/90"><?= htmlspecialchars($student_id) ?></span></p>
       </div>
-      <a class="text-sm font-semibold text-slate-200 hover:text-white" href="/admin/holds">Another student →</a>
+      <a class="text-sm font-semibold text-slate-200 hover:text-white" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Another student →</a>
     </div>
 
     <?php if ($error): ?>
@@ -51,7 +51,7 @@
                     <div class="text-right">
                       <?php if ((int)$h['is_active'] === 1): ?>
                         <span class="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-100">Active</span>
-                        <form class="mt-3 inline" method="post" action="/admin/holds/clear" onsubmit="return confirm('Clear this hold?');">
+                        <form class="mt-3 inline" method="post" action="<?= htmlspecialchars(url('/admin/holds/clear')) ?>" onsubmit="return confirm('Clear this hold?');">
                           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
                           <input type="hidden" name="hold_id" value="<?= (int)$h['hold_id'] ?>" />
                           <input type="hidden" name="student_id" value="<?= htmlspecialchars($student_id) ?>" />
@@ -73,7 +73,7 @@
 
         <div class="rounded-3xl border border-white/10 bg-white/5 p-6">
           <div class="text-sm font-semibold text-white">Add hold</div>
-          <form class="mt-4 space-y-4" method="post" action="/admin/holds/add">
+          <form class="mt-4 space-y-4" method="post" action="<?= htmlspecialchars(url('/admin/holds/add')) ?>">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
             <input type="hidden" name="student_id" value="<?= htmlspecialchars($student_id) ?>" />
             <div>

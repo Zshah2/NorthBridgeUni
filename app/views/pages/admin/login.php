@@ -21,7 +21,7 @@
           </div>
         <?php endif; ?>
 
-        <form class="mt-6 space-y-4" method="post" action="/login">
+        <form class="mt-6 space-y-4" method="post" action="<?= htmlspecialchars(url('/login')) ?>">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
           <div>
             <label class="block text-sm font-medium text-slate-200" for="username">Username</label>
@@ -51,8 +51,8 @@
         </form>
 
         <div class="mt-5 flex flex-col gap-2 text-xs text-slate-400">
-          <div>Need an account? <a class="font-semibold text-sky-200 hover:text-sky-100" href="/signup">Create one</a> (first-time setup).</div>
-          <div><a class="font-semibold text-slate-300 hover:text-white" href="/">Back to college site</a></div>
+          <div>Need an account? <a class="font-semibold text-sky-200 hover:text-sky-100" href="<?= htmlspecialchars(url('/signup')) ?>">Create one</a> (first-time setup).</div>
+          <div><a class="font-semibold text-slate-300 hover:text-white" href="<?= htmlspecialchars(url('/')) ?>">Back to college site</a></div>
         </div>
       </div>
     </div>

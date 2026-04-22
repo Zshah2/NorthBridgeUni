@@ -13,11 +13,11 @@
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Student lookup</h1>
         <p class="mt-2 max-w-2xl text-sm text-slate-300">Enter an exact `student_id` to view live data.</p>
       </div>
-      <a class="text-sm font-semibold text-slate-200 hover:text-white" href="/admin">Back to dashboard →</a>
+      <a class="text-sm font-semibold text-slate-200 hover:text-white" href="<?= htmlspecialchars(url('/admin')) ?>">Back to dashboard →</a>
     </div>
 
     <div class="mt-8 max-w-xl rounded-3xl border border-white/10 bg-white/5 p-6">
-      <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="get" action="/admin/students/show">
+      <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="get" action="<?= htmlspecialchars(url('/admin/students/show')) ?>">
         <div class="flex-1">
           <label class="block text-sm font-medium text-slate-200" for="student_id">Student ID</label>
           <input

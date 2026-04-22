@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/url.php';
+
 function auth_start_session(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -18,7 +20,7 @@ function auth_is_admin(): bool
 function auth_require_admin(): void
 {
     if (!auth_is_admin()) {
-        header('Location: /login');
+        header('Location: ' . url('/login'));
         exit;
     }
 }

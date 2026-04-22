@@ -54,6 +54,8 @@ php -S localhost:8000 -t public
 
 Then open `http://localhost:8000`.
 
+If you open the site as a **subpath** (for example `http://localhost:8000/public/` or PhpStorm’s `.../public/index.php` URL), links and redirects use an automatic **base path** from `SCRIPT_NAME`. You can override it with `APP_BASE_PATH` (no trailing slash), e.g. `export APP_BASE_PATH=/CollegWeb/public`.
+
 ### PhpStorm
 - Open this folder as a project.
 - Set DocumentRoot to `public/` if using a local server config.

@@ -39,7 +39,7 @@
         },
       };
     </script>
-    <link rel="stylesheet" href="/assets/css/app.css" />
+    <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/app.css')) ?>" />
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-slate-50">
     <a class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 ring-1 ring-white/10" href="#main">
@@ -54,7 +54,7 @@
 
     <?php require view_path('partials/footer.php'); ?>
 
-    <script src="/assets/js/app.js"></script>
+    <script src="<?= htmlspecialchars(url('/assets/js/app.js')) ?>"></script>
   </body>
 </html>
 

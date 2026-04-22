@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../app/lib/view.php';
+require __DIR__ . '/../app/lib/url.php';
 require __DIR__ . '/../app/lib/db.php';
 require __DIR__ . '/../app/lib/auth.php';
 require __DIR__ . '/../app/lib/csrf.php';
@@ -23,6 +24,15 @@ $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
 if (is_string($scriptName) && $scriptName !== '' && str_starts_with($path, $scriptName)) {
     $path = substr($path, strlen($scriptName));
     $path = $path === '' ? '/' : $path;
+}
+
+// e.g. REQUEST_URI /project/public/login with SCRIPT_NAME /project/public/index.php → route /login
+$scriptDir = is_string($scriptName) && $scriptName !== ''
+    ? str_replace('\\', '/', dirname($scriptName))
+    : '';
+if ($scriptDir !== '' && $scriptDir !== '/' && $scriptDir !== '.' && str_starts_with($path, $scriptDir)) {
+    $suffix = substr($path, strlen($scriptDir));
+    $path = $suffix === '' ? '/' : $suffix;
 }
 
 if ($path === '/index.php' || $path === '/public/index.php') {

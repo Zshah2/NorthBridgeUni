@@ -23,7 +23,7 @@
         No terms in the database yet. Run <code class="text-sky-200/90">php scripts/seed_demo_registration.php</code> after migrate and import.
       </div>
     <?php else: ?>
-    <form class="mt-8 flex flex-wrap items-end gap-4 rounded-3xl border border-white/10 bg-white/5 p-5" method="get" action="/admin/schedule">
+    <form class="mt-8 flex flex-wrap items-end gap-4 rounded-3xl border border-white/10 bg-white/5 p-5" method="get" action="<?= htmlspecialchars(url('/admin/schedule')) ?>">
       <div>
         <label class="block text-sm font-medium text-slate-200" for="term_id">Term</label>
         <select class="mt-2 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-100" id="term_id" name="term_id">
