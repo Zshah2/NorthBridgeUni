@@ -56,6 +56,8 @@ Then open `http://localhost:8000/login` etc.
 
 **Apache:** [public/.htaccess](public/.htaccess) sends unknown paths to `index.php` when `mod_rewrite` is enabled and `AllowOverride` permits it.
 
+**Real `login.php` / `signup.php` files:** [public/login.php](public/login.php) and [public/signup.php](public/signup.php) only **redirect** to `index.php/login` and `index.php/signup` so PhpStorm or bookmarks like `…/public/login.php` still reach the app.
+
 If you open the site as a **subpath** (for example `http://localhost:8000/public/` or PhpStorm’s `.../public/index.php` URL), links and redirects use an automatic **base path** from `SCRIPT_NAME`. You can override it with `APP_BASE_PATH` (no trailing slash), e.g. `export APP_BASE_PATH=/CollegWeb/public`.
 
 **PhpStorm built-in server** (`http://localhost:63342/...`) does not rewrite pretty URLs like `/CollegWeb/public/login` to `index.php`, so those requests never hit PHP. This project **auto-generates** links as `/CollegWeb/public/index.php/login` when the host contains `:63342`. To force that behavior elsewhere, set `APP_USE_INDEX_PHP_LINKS=1`; to disable on port 63342, set `APP_USE_INDEX_PHP_LINKS=0`.

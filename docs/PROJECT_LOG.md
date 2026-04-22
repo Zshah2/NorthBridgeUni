@@ -6,6 +6,14 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — `public/login.php` + `public/signup.php` shims
+
+**Goal:** Some setups expect real files named `login.php` in `public/`.
+
+**Change:** [public/login.php](../public/login.php) and [public/signup.php](../public/signup.php) issue a **302** to `index.php/login` and `index.php/signup` (path derived from `SCRIPT_NAME`). Main app remains single front controller [public/index.php](../public/index.php).
+
+---
+
 ## 2026-04-22 — Avoid “404” with no PHP (router + .htaccess)
 
 **Problem:** If the web server never runs `index.php` for `/login`, you get the server’s hard **404** (not the app’s styled page).
