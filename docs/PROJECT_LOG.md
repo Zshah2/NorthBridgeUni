@@ -6,6 +6,14 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — PhpStorm :63342 and `/public/login`
+
+**Problem:** JetBrains’ built-in server (`http://localhost:63342/...`) does not rewrite `/CollegWeb/public/login` to `index.php`, so PHP routing never runs.
+
+**Change:** [app/lib/url.php](app/lib/url.php) — when `HTTP_HOST` contains `:63342` (or `APP_USE_INDEX_PHP_LINKS=1`), internal links use `/…/public/index.php/login` style via `app_front_controller()` + `app_use_index_php_in_links()`. Override off with `APP_USE_INDEX_PHP_LINKS=0`.
+
+---
+
 ## 2026-04-22 — Login link / subpath routing
 
 **Problem:** Navbar **Login** used `href="/login"`, which goes to the **server root**, not the app folder when the site runs under a subpath (e.g. `.../public/`). Same for CSS/JS `/assets/...` and form `action` attributes.

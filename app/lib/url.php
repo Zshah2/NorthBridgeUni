@@ -3,6 +3,47 @@
 declare(strict_types=1);
 
 /**
+ * Full web path to index.php (e.g. /CollegWeb/public/index.php) for link generation.
+ */
+function app_front_controller(): string
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    if (!is_string($script) || !str_ends_with($script, '/index.php')) {
+        $cached = '';
+
+        return $cached;
+    }
+
+    $cached = str_replace('\\', '/', $script);
+
+    return $cached;
+}
+
+/**
+ * JetBrains / PhpStorm built-in server (port 63342) does not rewrite /public/login → index.php.
+ * In that case links must be /public/index.php/login. Opt in/out with APP_USE_INDEX_PHP_LINKS (1/0/true/false).
+ */
+function app_use_index_php_in_links(): bool
+{
+    $env = getenv('APP_USE_INDEX_PHP_LINKS');
+    if ($env === '0' || strtolower((string)$env) === 'false' || strtolower((string)$env) === 'off') {
+        return false;
+    }
+    if ($env === '1' || strtolower((string)$env) === 'true' || strtolower((string)$env) === 'on') {
+        return true;
+    }
+
+    $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+
+    return str_contains($host, ':63342');
+}
+
+/**
  * URL prefix when the app is not served at the web server root (derived from SCRIPT_NAME …/index.php).
  * Override with env APP_BASE_PATH (no trailing slash), e.g. APP_BASE_PATH=/CollegWeb/public
  */
@@ -55,6 +96,13 @@ function url(string $path): string
     }
 
     $p = '/' . ltrim($path, '/');
+    if (app_use_index_php_in_links()) {
+        $fc = app_front_controller();
+        if ($fc !== '') {
+            return $fc . $p . $query;
+        }
+    }
+
     $base = app_base_path();
 
     return ($base === '' ? '' : $base) . $p . $query;

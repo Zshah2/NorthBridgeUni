@@ -84,6 +84,8 @@ The site entry point is [public/index.php](../public/index.php). Point the virtu
 
 Example (conceptual): `DocumentRoot /var/www/collegeweb/public`
 
+**PhpStorm / JetBrains** (`http://localhost:63342/...`): the IDE’s built-in server usually does **not** map `/your/project/public/login` to `index.php`, so PHP never runs for that URL. Prefer `php -S localhost:8000 -t public` from [README.md](../README.md), or use links like `/your/project/public/index.php/login`. This repo auto-uses `index.php/...` links when the host contains `:63342`; see README for `APP_USE_INDEX_PHP_LINKS`.
+
 ---
 
 ## 6. Fresh install instead of a dump (alternative)
