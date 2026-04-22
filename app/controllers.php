@@ -52,6 +52,7 @@ function handler_admin_login_form(array $params): void
         'app' => $app,
         'error' => null,
         'csrf' => csrf_token(),
+        'pageTitle' => 'Sign in',
     ], 'layouts/main.php');
 }
 
@@ -72,6 +73,7 @@ function handler_admin_login_submit(array $params): void
         'app' => $app,
         'error' => 'Invalid username or password.',
         'csrf' => csrf_token(),
+        'pageTitle' => 'Sign in',
     ], 'layouts/main.php');
 }
 
@@ -85,6 +87,7 @@ function handler_admin_signup_form(array $params): void
         'app' => $app,
         'error' => null,
         'csrf' => csrf_token(),
+        'pageTitle' => 'Create account',
     ], 'layouts/main.php');
 }
 
@@ -106,6 +109,7 @@ function handler_admin_signup_submit(array $params): void
             'app' => $app,
             'error' => 'Passwords do not match.',
             'csrf' => csrf_token(),
+            'pageTitle' => 'Create account',
         ], 'layouts/main.php');
 
         return;
@@ -117,6 +121,7 @@ function handler_admin_signup_submit(array $params): void
             'app' => $app,
             'error' => $err ?: 'Sign up failed.',
             'csrf' => csrf_token(),
+            'pageTitle' => 'Create account',
         ], 'layouts/main.php');
 
         return;

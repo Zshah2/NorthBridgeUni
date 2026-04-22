@@ -8,9 +8,12 @@
   <div class="mx-auto max-w-6xl px-4 py-14 sm:px-6">
     <div class="mx-auto max-w-md">
       <div class="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8">
-        <div class="text-sm font-semibold text-sky-200">Login</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="text-sm font-semibold text-sky-200">Staff</div>
+          <span class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Admin</span>
+        </div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white">Create account</h1>
-        <p class="mt-2 text-sm text-slate-300">Create an account to access your dashboard.</p>
+        <p class="mt-2 text-sm text-slate-300">Creates an <strong class="font-semibold text-slate-200">admin</strong> user in the database so you can open the staff dashboard. Password must be at least 8 characters.</p>
 
         <?php if ($error): ?>
           <div class="mt-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
@@ -60,8 +63,9 @@
           </button>
         </form>
 
-        <div class="mt-5 text-xs text-slate-400">
-          Already have an account? <a class="font-semibold text-sky-200 hover:text-sky-100" href="/login">Sign in</a>.
+        <div class="mt-5 flex flex-col gap-2 text-xs text-slate-400">
+          <div>Already have an account? <a class="font-semibold text-sky-200 hover:text-sky-100" href="/login">Sign in</a>.</div>
+          <div><a class="font-semibold text-slate-300 hover:text-white" href="/">Back to college site</a></div>
         </div>
       </div>
     </div>

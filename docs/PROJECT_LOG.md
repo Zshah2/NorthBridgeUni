@@ -6,6 +6,22 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — Login / signup UX
+
+**Goal:** Make staff vs student expectations obvious; improve browser tab titles; avoid a raw-text CSRF failure.
+
+**Changes**
+
+| Area | Detail |
+|------|--------|
+| [app/views/pages/admin/login.php](app/views/pages/admin/login.php) | Staff + Admin labels, clearer copy (signup vs `seed_admin.php`, staff tools not student portal), link back to `/`. |
+| [app/views/pages/admin/signup.php](app/views/pages/admin/signup.php) | Same labeling; explains admin account + password rule; link home. |
+| [app/views/partials/seo.php](app/views/partials/seo.php) | Optional `pageTitle` → document title `Page — Northbridge College`. |
+| [app/controllers.php](app/controllers.php) | Pass `pageTitle` for login and signup renders. |
+| [app/lib/csrf.php](app/lib/csrf.php) | CSRF failure returns a small styled HTML page with link to `/login`. |
+
+---
+
 ## 2026-04-22 — Git: initial push to GitHub
 
 **Goal:** Version the project on GitHub (`NorthBridge`, private remote).

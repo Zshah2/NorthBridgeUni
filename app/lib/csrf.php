@@ -25,7 +25,15 @@ function csrf_require_valid(): void
 {
     if (!csrf_validate()) {
         http_response_code(403);
-        echo 'Session expired or invalid form token. Please refresh the page and try again.';
+        header('Content-Type: text/html; charset=utf-8');
+        $msg = 'Your session expired or the form token was invalid. Go back, refresh the page, and try again.';
+        echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Session expired</title></head>';
+        echo '<body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;line-height:1.5">';
+        echo '<div style="max-width:28rem;margin:4rem auto;padding:0 1.5rem">';
+        echo '<h1 style="font-size:1.125rem;font-weight:600;margin:0 0 0.5rem">Could not verify form</h1>';
+        echo '<p style="margin:0 0 1.25rem;font-size:0.9375rem;color:#94a3b8">' . htmlspecialchars($msg) . '</p>';
+        echo '<a href="/login" style="display:inline-block;font-size:0.875rem;font-weight:600;color:#0ea5e9;text-decoration:none">Return to login</a>';
+        echo '</div></body></html>';
         exit;
     }
 }
