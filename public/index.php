@@ -77,4 +77,8 @@ foreach ($routes as $route) {
 }
 
 http_response_code(404);
-echo 'Not found.';
+render('pages/404.php', [
+    'app' => $app,
+    'path' => $path,
+    'pageTitle' => 'Page not found',
+], 'layouts/main.php');

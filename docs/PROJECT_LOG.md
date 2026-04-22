@@ -6,6 +6,14 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-04-22 — Styled 404 (unknown routes)
+
+**Goal:** Unknown URLs were always `404` with plain text `Not found.` — correct behavior, but not obvious what went wrong.
+
+**Changes:** [public/index.php](public/index.php) now renders [app/views/pages/404.php](app/views/pages/404.php) (same layout as the site) with the path and links to `/` and `/login`. [docs/PROFESSOR_TEST_CHECKLIST.md](docs/PROFESSOR_TEST_CHECKLIST.md) updated accordingly.
+
+---
+
 ## 2026-04-22 — Login / signup UX
 
 **Goal:** Make staff vs student expectations obvious; improve browser tab titles; avoid a raw-text CSRF failure.
