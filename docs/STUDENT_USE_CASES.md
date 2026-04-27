@@ -1,6 +1,6 @@
 # CollegeWeb — Student use cases
 
-This file is **generated from** `Data/student_data_vertical - student_data_vertical.csv`. Regenerate with: `python3 scripts/build_use_cases_from_vertical_csv.py`
+This file is **generated from** `storage/import/student_data_vertical - student_data_vertical.csv`. Regenerate with: `python3 scripts/build_use_cases_from_vertical_csv.py`
 
 For Google Docs, use **`docs/USE_CASES_GOOGLE_DOC.txt`**.
 

@@ -97,7 +97,7 @@ Add new entries at the **top** under the latest date.
 
 | Area | Detail |
 |------|--------|
-| [Data/department.csv](../Data/department.csv) | Replaced `@boolean.edu` with `@northbridge.edu` on all department `email` values (local-part unchanged, e.g. `physics@northbridge.edu`). |
+| [storage/import/department.csv](../storage/import/department.csv) | Replaced `@boolean.edu` with `@northbridge.edu` on all department `email` values (local-part unchanged, e.g. `physics@northbridge.edu`). |
 | [README.md](../README.md) | Noted that department emails use `@northbridge.edu` and that `php scripts/import_all.php` should be re-run after editing the CSV so `departments.email` in MySQL stays in sync. |
 
 **Verification**

@@ -347,7 +347,7 @@ function import_courses_from_major(PDO $pdo, string $path): void
     fwrite(STDOUT, "Imported courses from majors file\n");
 }
 
-$base = __DIR__ . '/../Data';
+$base = __DIR__ . '/../storage/import';
 $files = [
     'users' => $base . '/users - users.csv',
     'faculty' => $base . '/faculty.csv',

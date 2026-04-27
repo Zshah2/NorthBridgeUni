@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Apply docs/sql/srs_course_export.sql to MySQL (your SRS / course schema + INSERT data).
+# Apply docs/database/sql/srs_course_export.sql to MySQL (your SRS / course schema + INSERT data).
 # Use this when the SRS dump is your source of truth for the database.
 #
 # Usage (from project root):
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SQL_FILE="${ROOT}/docs/sql/srs_course_export.sql"
+SQL_FILE="${ROOT}/docs/database/sql/srs_course_export.sql"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"

@@ -17,7 +17,7 @@ Your class **CREATE TABLE + INSERT** dump should be the database you use so you 
    ```
 
 2. **Paste your full SRS MySQL script** into  
-   **[docs/sql/srs_course_export.sql](sql/srs_course_export.sql)**  
+   **[docs/database/sql/srs_course_export.sql](database/sql/srs_course_export.sql)**  
    (everything: tables + sample data your professor gave you).
 
 3. **Apply it** (from project root, with the same `DB_*` values as [app/config/database.php](../app/config/database.php)):
@@ -47,17 +47,17 @@ Do **not** mix both on the same database if tables would conflict — use **eith
 
 ## CSV data (separate from SRS SQL)
 
-- **Folder:** [Data/](../Data/)
+- **Folder:** [storage/import/](../storage/import/)
 - **Import:** `php scripts/import_all.php` — only applies to the **CollegeWeb** schema from `001_init`, not automatically to arbitrary SRS tables.
 
 ---
 
-## Files in `docs/sql/`
+## Files in `docs/database/sql/`
 
 | File | Role |
 |------|------|
-| [srs_course_export.sql](sql/srs_course_export.sql) | **Your** SRS dump — primary DB when filled |
-| [README.txt](sql/README.txt) | Short index |
+| [srs_course_export.sql](database/sql/srs_course_export.sql) | **Your** SRS dump — primary DB when filled |
+| [README.txt](database/sql/README.txt) | Short index |
 | `srs_schema.sql` / `srs_sample_data.sql` | Optional split of the same content |
 
 ---

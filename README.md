@@ -59,5 +59,5 @@ Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 
 ### Project notes
 
-- Department emails in `Data/department.csv` use `@northbridge.edu`; re-run `import_all.php` after edits.
+- Department emails in `storage/import/department.csv` use `@northbridge.edu`; re-run `import_all.php` after edits.
 - Older checklists: [docs/PROFESSOR_TEST_CHECKLIST.md](docs/PROFESSOR_TEST_CHECKLIST.md) if present.

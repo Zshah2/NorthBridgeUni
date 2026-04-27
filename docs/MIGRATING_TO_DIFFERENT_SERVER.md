@@ -11,7 +11,7 @@ Use this when you move the project to another laptop, VPS, shared hosting, or cl
 | **Application code** | Whole repo folder (e.g. `CollegWeb/`). |
 | **MySQL data** | Export on the old server, import on the new one (see §2). Do not rely on copying raw MySQL data directories unless you know that host’s MySQL version and paths match. |
 | **Secrets** | Recreate `DB_*` (and any future `.env`) on the new server; do not commit real passwords. |
-| **Optional SQL dumps** | If you use `docs/sql/srs_course_export.sql` or a custom seed, keep that file in the repo or backup so you can rebuild the DB from scratch. |
+| **Optional SQL dumps** | If you use `docs/database/sql/srs_course_export.sql` or a custom seed, keep that file in the repo or backup so you can rebuild the DB from scratch. |
 
 Schema choices are documented in [SQL_NOTES.md](SQL_NOTES.md) (SRS dump vs `001_init` migration).
 

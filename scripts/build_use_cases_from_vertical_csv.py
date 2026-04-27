@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Read Data/student_data_vertical - student_data_vertical.csv (two-column vertical use cases)
+Read storage/import/student_data_vertical CSV (two-column vertical use cases)
 and write Google-Doc-friendly + Markdown copies under docs/.
 
 Source format per row: "FieldName:", "value" (CSV; Basic Flow may contain commas inside quotes).
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "Data" / "student_data_vertical - student_data_vertical.csv"
+SRC = ROOT / "storage" / "import" / "student_data_vertical - student_data_vertical.csv"
 OUT_TXT = ROOT / "docs" / "USE_CASES_GOOGLE_DOC.txt"
 OUT_MD = ROOT / "docs" / "STUDENT_USE_CASES.md"
 
@@ -109,7 +109,7 @@ def render_md(cases: list[UseCase]) -> str:
     parts.append("# CollegeWeb — Student use cases\n\n")
     parts.append(
         "This file is **generated from** "
-        "`Data/student_data_vertical - student_data_vertical.csv`. "
+        "`storage/import/student_data_vertical - student_data_vertical.csv`. "
         "Regenerate with: `python3 scripts/build_use_cases_from_vertical_csv.py`\n\n"
         "For Google Docs, use **`docs/USE_CASES_GOOGLE_DOC.txt`**.\n\n"
         "For database / SRS SQL notes, see **`docs/SQL_NOTES.md`**.\n\n"
