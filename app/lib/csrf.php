@@ -34,7 +34,7 @@ function csrf_require_valid(): void
         echo '<div style="max-width:28rem;margin:4rem auto;padding:0 1.5rem">';
         echo '<h1 style="font-size:1.125rem;font-weight:600;margin:0 0 0.5rem">Could not verify form</h1>';
         echo '<p style="margin:0 0 1.25rem;font-size:0.9375rem;color:#94a3b8">' . htmlspecialchars($msg) . '</p>';
-        $login = htmlspecialchars(url('/login'), ENT_QUOTES, 'UTF-8');
+        $login = htmlspecialchars(url('/login.php'), ENT_QUOTES, 'UTF-8');
         echo '<a href="' . $login . '" style="display:inline-block;font-size:0.875rem;font-weight:600;color:#0ea5e9;text-decoration:none">Return to login</a>';
         echo '</div></body></html>';
         exit;

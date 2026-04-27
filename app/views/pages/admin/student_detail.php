@@ -5,6 +5,8 @@
 /** @var array $departments */
 /** @var array $enrollments */
 /** @var array $holds */
+/** @var bool $can_manage_holds */
+$can_manage_holds = $can_manage_holds ?? false;
 ?>
 
 <section class="border-t border-white/10 bg-slate-950">
@@ -51,7 +53,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="text-sm font-semibold text-white">Holds</div>
             <?php if ($student && ctype_digit((string)$student_id)): ?>
-              <a class="text-xs font-semibold text-sky-200 hover:text-sky-100" href="<?= htmlspecialchars(url('/admin/holds/show?student_id=' . rawurlencode($student_id))) ?>">Manage →</a>
+              <a class="text-xs font-semibold text-sky-200 hover:text-sky-100" href="<?= htmlspecialchars(url('/admin/holds/show?student_id=' . rawurlencode($student_id))) ?>"><?= $can_manage_holds ? 'Manage holds →' : 'View holds →' ?></a>
             <?php endif; ?>
           </div>
           <div class="mt-4 space-y-2">

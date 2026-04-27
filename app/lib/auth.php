@@ -2,6 +2,13 @@
 
 declare(strict_types=1);
 
+/**
+ * Portal roles (`auth_users.role`):
+ * - admin: full access — registration add/drop, holds, future grade writes.
+ * - limited: registration + holds; cannot perform blocked write actions (e.g. grade import).
+ * - viewer: read-only — no mutations via admin.php or legacy /admin/holds/* POST routes.
+ */
+
 require_once __DIR__ . '/url.php';
 
 function auth_start_session(): void
@@ -42,6 +49,18 @@ function auth_is_portal_user(): bool
     return $r === 'admin' || $r === 'limited' || $r === 'viewer';
 }
 
+/** Add/clear student holds (admin.php + legacy holds routes) */
+function auth_can_manage_holds(): bool
+{
+    return auth_is_admin() || auth_is_limited();
+}
+
+/** Add/drop enrollments in admin registration UI */
+function auth_can_manage_registration(): bool
+{
+    return auth_is_admin() || auth_is_limited();
+}
+
 function auth_require_admin(): void
 {
     if (!auth_is_admin()) {
@@ -54,6 +73,15 @@ function auth_require_portal_user(): void
 {
     if (!auth_is_portal_user()) {
         header('Location: ' . url('/login.php'));
+        exit;
+    }
+}
+
+function auth_require_hold_manager(): void
+{
+    auth_require_portal_user();
+    if (!auth_can_manage_holds()) {
+        header('Location: ' . url('/admin.php?view=dashboard&msg=forbidden'));
         exit;
     }
 }

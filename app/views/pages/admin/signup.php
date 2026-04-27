@@ -64,7 +64,7 @@
         </form>
 
         <div class="mt-5 flex flex-col gap-2 text-xs text-slate-400">
-          <div>Already have an account? <a class="font-semibold text-sky-200 hover:text-sky-100" href="<?= htmlspecialchars(url('/login')) ?>">Sign in</a>.</div>
+          <div>Already have an account? <a class="font-semibold text-sky-200 hover:text-sky-100" href="<?= htmlspecialchars(url('/login.php')) ?>">Sign in</a>.</div>
           <div><a class="font-semibold text-slate-300 hover:text-white" href="<?= htmlspecialchars(url('/')) ?>">Back to college site</a></div>
         </div>
       </div>

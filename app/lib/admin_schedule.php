@@ -1,0 +1,300 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * @return array<string, bool>
+ */
+function admin_schedule_panel_flags_from_list(array $pickedKeys): array
+{
+    $keys = ['students', 'faculty', 'terms', 'departments', 'courses', 'sections'];
+    if ($pickedKeys === []) {
+        return array_fill_keys($keys, false);
+    }
+
+    $picked = [];
+    foreach ($pickedKeys as $p) {
+        $p = strtolower(trim((string)$p));
+        if (in_array($p, $keys, true)) {
+            $picked[$p] = true;
+        }
+    }
+    if ($picked === []) {
+        return array_fill_keys($keys, false);
+    }
+
+    return array_combine($keys, array_map(static fn (string $k) => isset($picked[$k]), $keys)) ?: array_fill_keys($keys, false);
+}
+
+/**
+ * Builds master-schedule data for the routed `/admin/schedule` page (`admin.php?view=schedule` redirects there).
+ *
+ * @param array<string, scalar|array|null> $get
+ *
+ * @return array{
+ *   schedule_panels: array<string, bool>,
+ *   search_q: string,
+ *   course_q: string,
+ *   catalog_dept: string,
+ *   sec_q: string,
+ *   valid_dept_ids_for_select: list<string>,
+ *   student_rows: list<array<string, mixed>>,
+ *   faculty_rows: list<array<string, mixed>>,
+ *   dept_rows: list<array<string, mixed>>,
+ *   course_rows: list<array<string, mixed>>,
+ *   terms: list<array<string, mixed>>,
+ *   term_id: int|null,
+ *   dept_id: string,
+ *   sections: list<array<string, mixed>>,
+ *   schedule_embed_preservation: bool
+ * }
+ */
+function admin_schedule_state(PDO $pdo, array $get): array
+{
+    $keysOrder = ['students', 'faculty', 'terms', 'departments', 'courses', 'sections'];
+    $panelsGet = isset($get['panels']) ? $get['panels'] : null;
+    $filtersSubmitted = isset($get['sched_filter']) && (string)$get['sched_filter'] === '1';
+
+    if (!$filtersSubmitted) {
+        $panelFlags = array_fill_keys($keysOrder, true);
+    } elseif (is_array($panelsGet)) {
+        $picked = [];
+        foreach ($keysOrder as $k) {
+            if (!empty($panelsGet[$k])) {
+                $picked[] = $k;
+            }
+        }
+        $panelFlags = admin_schedule_panel_flags_from_list($picked);
+    } elseif (is_string($panelsGet) && trim($panelsGet) !== '') {
+        $picked = array_filter(array_map('trim', explode(',', strtolower($panelsGet))));
+        $panelFlags = admin_schedule_panel_flags_from_list($picked);
+    } else {
+        $panelFlags = array_fill_keys($keysOrder, false);
+    }
+
+    $searchQ = trim((string)($get['q'] ?? ''));
+    $courseQ = trim((string)($get['course_q'] ?? ''));
+    $catalogDept = trim((string)($get['catalog_dept'] ?? ''));
+
+    $validDeptIds = [];
+    try {
+        $validDeptIds = $pdo->query('SELECT dept_id FROM departments')->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($validDeptIds)) {
+            $validDeptIds = [];
+        }
+    } catch (Throwable) {
+        $validDeptIds = [];
+    }
+    if ($catalogDept !== '' && !in_array($catalogDept, $validDeptIds, true)) {
+        $catalogDept = '';
+    }
+
+    $secQ = trim((string)($get['sec_q'] ?? ''));
+    $studentRows = [];
+    $facultyRows = [];
+
+    try {
+        if ($panelFlags['students'] ?? false) {
+            $stuSql = '
+              SELECT u.user_id, u.first_name, u.middle_name, u.last_name, u.user_type, u.city, u.state
+              FROM users u
+              INNER JOIN students s ON s.student_id = u.user_id
+            ';
+            $stuParams = [];
+            if ($searchQ !== '') {
+                $stuSql .= ' WHERE (
+                  CAST(u.user_id AS CHAR) LIKE ?
+                  OR LOWER(u.first_name) LIKE ?
+                  OR LOWER(u.last_name) LIKE ?
+                  OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+                )';
+                $likeId = '%' . $searchQ . '%';
+                $likeName = '%' . strtolower($searchQ) . '%';
+                $stuParams = [$likeId, $likeName, $likeName, $likeName];
+            }
+            $stuSql .= ' ORDER BY u.last_name, u.first_name, u.user_id';
+            $stSt = $pdo->prepare($stuSql);
+            $stSt->execute($stuParams);
+            $studentRows = $stSt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        if ($panelFlags['faculty'] ?? false) {
+            $facSql = '
+              SELECT u.user_id AS faculty_id, u.first_name, u.middle_name, u.last_name, u.user_type,
+                     f.office_number, f.`rank` AS faculty_rank, f.faculty_type
+              FROM users u
+              INNER JOIN faculty f ON f.faculty_id = u.user_id
+            ';
+            $facParams = [];
+            if ($searchQ !== '') {
+                $facSql .= ' WHERE (
+                  CAST(u.user_id AS CHAR) LIKE ?
+                  OR LOWER(u.first_name) LIKE ?
+                  OR LOWER(u.last_name) LIKE ?
+                  OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+                )';
+                $likeId = '%' . $searchQ . '%';
+                $likeName = '%' . strtolower($searchQ) . '%';
+                $facParams = [$likeId, $likeName, $likeName, $likeName];
+            }
+            $facSql .= ' ORDER BY u.last_name, u.first_name, u.user_id';
+            $facSt = $pdo->prepare($facSql);
+            $facSt->execute($facParams);
+            $facultyRows = $facSt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Throwable) {
+    }
+
+    $deptRows = [];
+    $courseRows = [];
+    try {
+        if (($panelFlags['departments'] ?? false)) {
+            if ($catalogDept !== '') {
+                $stDept = $pdo->prepare('
+                  SELECT dept_id, dept_name, email, phone_number, building_number, room_number
+                  FROM departments WHERE dept_id = ? ORDER BY dept_id
+                ');
+                $stDept->execute([$catalogDept]);
+                $deptRows = $stDept->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $deptRows = $pdo->query('
+                  SELECT dept_id, dept_name, email, phone_number, building_number, room_number
+                  FROM departments ORDER BY dept_id
+                ')->fetchAll(PDO::FETCH_ASSOC);
+            }
+        }
+        if (($panelFlags['courses'] ?? false)) {
+            $cWhere = [];
+            $cBind = [];
+            if ($catalogDept !== '') {
+                $cWhere[] = 'c.dept_id = ?';
+                $cBind[] = $catalogDept;
+            }
+            if ($courseQ !== '') {
+                $cWhere[] = '(c.course_id LIKE ? OR LOWER(c.course_name) LIKE ?)';
+                $cBind[] = '%' . $courseQ . '%';
+                $cBind[] = '%' . strtolower($courseQ) . '%';
+            }
+            $csql = '
+              SELECT c.course_id, c.course_name, c.credits, c.dept_id
+              FROM courses c
+            ';
+            if ($cWhere !== []) {
+                $csql .= ' WHERE ' . implode(' AND ', $cWhere);
+            }
+            $csql .= ' ORDER BY c.dept_id, c.course_id';
+            $cst = $pdo->prepare($csql);
+            $cst->execute($cBind);
+            $courseRows = $cst->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Throwable) {
+    }
+
+    $terms = [];
+    try {
+        $terms = $pdo->query('
+          SELECT term_id, code, name, start_date, end_date FROM terms ORDER BY COALESCE(start_date, "1970-01-01") DESC, term_id DESC
+        ')->fetchAll(PDO::FETCH_ASSOC);
+        if ($terms === false) {
+            $terms = [];
+        }
+    } catch (Throwable) {
+        $terms = [];
+    }
+
+    $termId = null;
+    if ($terms !== []) {
+        /** @var list<int> $validTermIds */
+        $validTermIds = array_map(static fn ($t) => (int)$t['term_id'], $terms);
+        $tidRaw = $get['term_id'] ?? null;
+        if (isset($tidRaw) && ctype_digit((string)$tidRaw) && in_array((int)$tidRaw, $validTermIds, true)) {
+            $termId = (int)$tidRaw;
+        } else {
+            $termId = (int)$terms[0]['term_id'];
+        }
+    }
+
+    $deptFilter = trim((string)($get['dept_id'] ?? ''));
+    if ($deptFilter !== '' && !in_array($deptFilter, $validDeptIds, true)) {
+        $deptFilter = '';
+    }
+
+    $sections = [];
+
+    $allPanelsOn = !in_array(false, $panelFlags, true);
+
+    if (($panelFlags['sections'] ?? false) && $termId !== null) {
+        $sql = '
+          SELECT
+            s.section_id,
+            c.course_id,
+            c.course_name,
+            c.credits,
+            c.dept_id,
+            t.code AS term_code,
+            t.name AS term_name,
+            u.first_name AS fac_first,
+            u.last_name AS fac_last,
+            s.meeting_days,
+            s.meeting_time,
+            s.room,
+            s.capacity
+          FROM sections s
+          JOIN courses c ON c.course_id = s.course_id
+          JOIN terms t ON t.term_id = s.term_id
+          LEFT JOIN faculty f ON f.faculty_id = s.faculty_id
+          LEFT JOIN users u ON u.user_id = f.faculty_id
+          WHERE s.term_id = ?
+        ';
+        $bind = [$termId];
+        if ($deptFilter !== '') {
+            $sql .= ' AND c.dept_id = ?';
+            $bind[] = $deptFilter;
+        }
+        if ($secQ !== '') {
+            $sql .= ' AND (
+              CAST(s.section_id AS CHAR) LIKE ?
+              OR c.course_id LIKE ?
+              OR LOWER(c.course_name) LIKE ?
+              OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+              OR LOWER(COALESCE(s.room, "")) LIKE ?
+              OR LOWER(COALESCE(s.meeting_days, "")) LIKE ?
+              OR LOWER(COALESCE(s.meeting_time, "")) LIKE ?
+            )';
+            $slike = '%' . strtolower($secQ) . '%';
+            $idLike = '%' . $secQ . '%';
+            array_push($bind, $idLike, $idLike, $slike, $slike, $slike, $slike, $slike);
+        }
+        $sql .= ' ORDER BY c.course_id, s.section_id';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($bind);
+        $sections = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    $scheduleEmbedPreserve = !$allPanelsOn
+        || $filtersSubmitted
+        || $searchQ !== ''
+        || $courseQ !== ''
+        || $catalogDept !== ''
+        || $secQ !== ''
+        || $deptFilter !== '';
+
+    return [
+        'schedule_panels' => $panelFlags,
+        'schedule_embed_preservation' => $scheduleEmbedPreserve,
+        'search_q' => $searchQ,
+        'course_q' => $courseQ,
+        'catalog_dept' => $catalogDept,
+        'sec_q' => $secQ,
+        'valid_dept_ids_for_select' => $validDeptIds,
+        'student_rows' => $studentRows,
+        'faculty_rows' => $facultyRows,
+        'dept_rows' => $deptRows,
+        'course_rows' => $courseRows,
+        'terms' => $terms,
+        'term_id' => $termId,
+        'dept_id' => $deptFilter,
+        'sections' => $sections,
+    ];
+}

@@ -47,16 +47,12 @@ function handler_health(array $params): void
 
 function handler_admin_login_form(array $params): void
 {
-    global $app;
     if (auth_is_portal_user()) {
         redirect('/admin.php');
     }
-    render('pages/admin/login.php', [
-        'app' => $app,
-        'error' => null,
-        'csrf' => csrf_token(),
-        'pageTitle' => 'Sign in',
-    ], 'layouts/main.php');
+    // Staff sign-in lives on the real file public/login.php (clean URL under PhpStorm, etc.).
+    header('Location: ' . url('/login.php'), true, 302);
+    exit;
 }
 
 function handler_admin_login_submit(array $params): void
@@ -235,6 +231,7 @@ function handler_admin_student_show(array $params): void
         'departments' => $departments,
         'enrollments' => $enrollments,
         'holds' => $holds,
+        'can_manage_holds' => auth_can_manage_holds(),
     ], 'layouts/main.php');
 }
 
@@ -243,64 +240,28 @@ function handler_admin_schedule(array $params): void
     global $app;
     auth_require_portal_user();
 
-    $pdo = db();
-    $terms = $pdo->query('SELECT term_id, code, name, start_date FROM terms ORDER BY start_date DESC, term_id DESC')->fetchAll();
+    require_once __DIR__ . '/lib/admin_schedule.php';
 
-    $termId = null;
-    if ($terms) {
-        $validTermIds = array_map(static fn($t) => (int)$t['term_id'], $terms);
-        if (isset($_GET['term_id']) && ctype_digit((string)$_GET['term_id']) && in_array((int)$_GET['term_id'], $validTermIds, true)) {
-            $termId = (int)$_GET['term_id'];
-        } else {
-            $termId = (int)$terms[0]['term_id'];
-        }
-    }
+    auth_start_session();
+    $portalUser = (string)($_SESSION['auth']['username'] ?? '');
+    $portalRole = auth_is_viewer()
+        ? 'Viewer'
+        : (auth_is_limited() ? 'Limited Admin' : 'Admin');
 
-    $deptFilter = trim((string)($_GET['dept_id'] ?? ''));
-    $sections = [];
+    $state = admin_schedule_state(db(), $_GET);
 
-    if ($termId !== null) {
-        $sql = '
-          SELECT
-            s.section_id,
-            c.course_id,
-            c.course_name,
-            c.credits,
-            c.dept_id,
-            t.code AS term_code,
-            t.name AS term_name,
-            u.first_name AS fac_first,
-            u.last_name AS fac_last,
-            s.meeting_days,
-            s.meeting_time,
-            s.room,
-            s.capacity
-          FROM sections s
-          JOIN courses c ON c.course_id = s.course_id
-          JOIN terms t ON t.term_id = s.term_id
-          LEFT JOIN faculty f ON f.faculty_id = s.faculty_id
-          LEFT JOIN users u ON u.user_id = f.faculty_id
-          WHERE s.term_id = ?
-        ';
-        $bind = [$termId];
-        if ($deptFilter !== '') {
-            $sql .= ' AND c.dept_id = ?';
-            $bind[] = $deptFilter;
-        }
-        $sql .= ' ORDER BY c.course_id, s.section_id';
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($bind);
-        $sections = $stmt->fetchAll();
-    }
-
-    render('pages/admin/schedule.php', [
-        'app' => $app,
-        'terms' => $terms,
-        'term_id' => $termId,
-        'dept_id' => $deptFilter,
-        'sections' => $sections,
-    ], 'layouts/main.php');
+    render(
+        'pages/admin/schedule.php',
+        array_merge(['app' => $app], $state, [
+            'pageTitle' => 'Master schedule — Northbridge Admin',
+            'admin_nav_active' => 'schedule',
+            'admin_username' => $portalUser,
+            'admin_role_label' => $portalRole,
+            'csrf' => csrf_token(),
+            'schedule_form_action' => url('/admin/schedule'),
+        ]),
+        'layouts/admin_portal.php'
+    );
 }
 
 function handler_admin_holds_index(array $params): void
@@ -310,6 +271,7 @@ function handler_admin_holds_index(array $params): void
     render('pages/admin/holds_search.php', [
         'app' => $app,
         'student_id' => trim((string)($_GET['student_id'] ?? '')),
+        'can_manage_holds' => auth_can_manage_holds(),
     ], 'layouts/main.php');
 }
 
@@ -358,12 +320,13 @@ function handler_admin_holds_show(array $params): void
         'error' => $error,
         'csrf' => csrf_token(),
         'hold_types' => ['Bursar', 'Academic', 'Registration', 'Other'],
+        'can_manage_holds' => auth_can_manage_holds(),
     ], 'layouts/main.php');
 }
 
 function handler_admin_holds_add(array $params): void
 {
-    auth_require_portal_user();
+    auth_require_hold_manager();
     csrf_require_valid();
 
     $studentId = isset($_POST['student_id']) && ctype_digit((string)$_POST['student_id']) ? (int)$_POST['student_id'] : null;
@@ -399,7 +362,7 @@ function handler_admin_holds_add(array $params): void
 
 function handler_admin_holds_clear(array $params): void
 {
-    auth_require_portal_user();
+    auth_require_hold_manager();
     csrf_require_valid();
 
     $holdId = isset($_POST['hold_id']) && ctype_digit((string)$_POST['hold_id']) ? (int)$_POST['hold_id'] : null;

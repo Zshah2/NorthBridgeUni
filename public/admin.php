@@ -20,8 +20,8 @@ $isAdmin = auth_is_admin();
 $isLimited = auth_is_limited();
 $isViewer = auth_is_viewer();
 $roleLabel = $isViewer ? 'Viewer' : ($isLimited ? 'Limited Admin' : 'Admin');
-$canRegister = !$isViewer;
-$canManageHolds = true;
+$canRegister = auth_can_manage_registration();
+$canManageHolds = auth_can_manage_holds();
 $canPostGrades = $isAdmin;
 
 $csrf = csrf_token();
@@ -94,12 +94,8 @@ function schedule_conflicts(?string $daysA, ?string $timeA, ?string $daysB, ?str
 // POST actions
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($isViewer) {
-        $allowed = ['hold_clear', 'hold_clear_people', 'hold_add_people', 'hold_add'];
-        $act = (string)($_POST['action'] ?? '');
-        if (!in_array($act, $allowed, true)) {
-            header('Location: ' . url('/admin.php?view=' . rawurlencode($view) . '&msg=readonly'));
-            exit;
-        }
+        header('Location: ' . url('/admin.php?view=' . rawurlencode($view) . '&msg=readonly'));
+        exit;
     }
     if ($isLimited) {
         $blocked = ['grade_upsert'];
@@ -340,6 +336,18 @@ function nav_item(string $href, string $label, bool $active): string
   </header>
 
   <main class="relative mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <?php
+    $flashMsg = trim((string)($_GET['msg'] ?? ''));
+    $flashMap = [
+        'readonly' => ['warn', 'Your role is read-only; that action was not applied.'],
+        'forbidden' => ['error', 'Your role cannot perform that action.'],
+    ];
+    if ($flashMsg !== '' && isset($flashMap[$flashMsg])) {
+        [$ftone, $ftext] = $flashMap[$flashMsg];
+        $fcls = $ftone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950';
+        echo '<div class="mb-6 rounded-2xl border ' . $fcls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($ftext) . '</div>';
+    }
+    ?>
     <div class="grid gap-6 lg:grid-cols-12">
       <aside class="lg:col-span-3">
         <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -351,6 +359,15 @@ function nav_item(string $href, string $label, bool $active): string
             <?= nav_item(url('/admin.php?view=enrollment'), 'Directory', $view === 'enrollment') ?>
             <?= nav_item(url('/admin.php?view=registration'), 'Registration', $view === 'registration') ?>
           </nav>
+          <p class="mt-4 text-xs leading-relaxed text-slate-500">
+            <?php if ($isViewer): ?>
+              <strong class="text-slate-600">Viewer:</strong> browse only. No add/drop or hold changes.
+            <?php elseif ($isLimited): ?>
+              <strong class="text-slate-600">Limited:</strong> holds, registration add/drop. No grade import.
+            <?php else: ?>
+              <strong class="text-slate-600">Admin:</strong> full access.
+            <?php endif; ?>
+          </p>
         </div>
       </aside>
       <div class="lg:col-span-9">
@@ -486,66 +503,23 @@ function nav_item(string $href, string $label, bool $active): string
           <?php endif; ?>
 
         <?php elseif ($view === 'schedule'): ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Master schedule</h1>
           <?php
-          $terms = $pdo->query('SELECT term_id, code, name FROM terms ORDER BY start_date DESC')->fetchAll(PDO::FETCH_ASSOC);
-          $tid = $currentTermId;
-          if (isset($_GET['term_id']) && ctype_digit((string)$_GET['term_id'])) {
-              $tid = (int)$_GET['term_id'];
-          }
+          require_once __DIR__ . '/../app/lib/admin_schedule.php';
+          $scheduleState = admin_schedule_state($pdo, $_GET);
+          $schedule_form_action = url('/admin.php?view=schedule');
+          extract($scheduleState, EXTR_SKIP);
+          require view_path('pages/admin/schedule.php');
           ?>
-          <form class="mt-4" method="get">
-            <input type="hidden" name="view" value="schedule" />
-            <select name="term_id" class="rounded-xl border border-slate-200 px-3 py-2 text-sm" onchange="this.form.submit()">
-              <?php foreach ($terms as $t): ?>
-                <option value="<?= (int)$t['term_id'] ?>" <?= (int)$t['term_id'] === $tid ? 'selected' : '' ?>><?= htmlspecialchars((string)$t['code']) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </form>
-          <?php
-          $sch = $pdo->prepare('
-            SELECT s.section_id, c.course_id, c.course_name, s.meeting_days, s.meeting_time, s.room, s.capacity,
-                   u.first_name AS ff, u.last_name AS fl
-            FROM sections s
-            JOIN courses c ON c.course_id = s.course_id
-            LEFT JOIN faculty f ON f.faculty_id = s.faculty_id
-            LEFT JOIN users u ON u.user_id = f.faculty_id
-            WHERE s.term_id = ?
-            ORDER BY c.course_id, s.section_id
-            LIMIT 200
-          ');
-          $sch->execute([$tid]);
-          $schRows = $sch->fetchAll(PDO::FETCH_ASSOC);
-          ?>
-          <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-            <table class="min-w-full text-left text-sm">
-              <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                <tr><th class="px-4 py-3">Section</th><th class="px-4 py-3">Course</th><th class="px-4 py-3">Instructor</th><th class="px-4 py-3">Meets</th><th class="px-4 py-3">Cap</th></tr>
-              </thead>
-              <tbody class="divide-y divide-slate-200">
-                <?php foreach ($schRows as $r): ?>
-                  <tr>
-                    <td class="px-4 py-3 font-semibold">#<?= (int)$r['section_id'] ?></td>
-                    <td class="px-4 py-3"><?= htmlspecialchars((string)$r['course_id']) ?> — <?= htmlspecialchars((string)$r['course_name']) ?></td>
-                    <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars(trim((string)($r['fl'] ?? '') . ', ' . (string)($r['ff'] ?? ''))) ?></td>
-                    <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars(trim((string)($r['meeting_days'] ?? '') . ' ' . (string)($r['meeting_time'] ?? ''))) ?></td>
-                    <td class="px-4 py-3"><?= (int)$r['capacity'] ?></td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
 
         <?php elseif ($view === 'enrollment'): ?>
           <h1 class="text-2xl font-semibold text-slate-900">Directory</h1>
-          <p class="mt-2 text-sm text-slate-600">Students (first 100).</p>
+          <p class="mt-2 text-sm text-slate-600">All students in the database.</p>
           <?php
           $dir = $pdo->query('
             SELECT u.user_id, u.first_name, u.last_name
             FROM users u
             JOIN students s ON s.student_id = u.user_id
             ORDER BY u.last_name, u.first_name
-            LIMIT 100
           ')->fetchAll(PDO::FETCH_ASSOC);
           ?>
           <div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">

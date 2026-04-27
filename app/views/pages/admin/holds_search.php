@@ -1,6 +1,8 @@
 <?php
 /** @var array $app */
 /** @var string $student_id */
+/** @var bool $can_manage_holds */
+$can_manage_holds = $can_manage_holds ?? false;
 $err = $_GET['error'] ?? '';
 $msg = match ($err) {
     'invalid' => 'Invalid hold form submission.',
@@ -17,7 +19,7 @@ $msg = match ($err) {
       <div>
         <div class="text-sm font-semibold text-sky-200">Admin</div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Student holds</h1>
-        <p class="mt-2 max-w-2xl text-sm text-slate-300">Look up a student by <code class="text-sky-200/90">student_id</code>, then add or clear holds.</p>
+        <p class="mt-2 max-w-2xl text-sm text-slate-300">Look up a student by <code class="text-sky-200/90">student_id</code><?= $can_manage_holds ? ', then add or clear holds.' : ' to view holds (read-only for your role).' ?></p>
       </div>
     </div>
 

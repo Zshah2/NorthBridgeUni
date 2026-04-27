@@ -3,11 +3,32 @@
 declare(strict_types=1);
 
 /**
- * Normalized request script path (e.g. /CollegWeb/public/login.php).
+ * Raw SCRIPT_NAME (may omit project prefix on some built-in servers / IDEs).
  */
 function app_script_name(): string
 {
     return str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+}
+
+/**
+ * Web path to the executing script (/project/public/index.php). When REQUEST_URI
+ * contains /index.php, derive from it so SCRIPT_NAME quirks (e.g. only /index.php)
+ * do not break links and routing under a subdirectory.
+ */
+function app_effective_script_name(): string
+{
+    $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    $uriPath = str_replace('\\', '/', (string)(($uriPath === false || $uriPath === null || $uriPath === '') ? '/' : $uriPath));
+
+    $needle = '/index.php';
+    $pos = strpos($uriPath, $needle);
+    if ($pos !== false) {
+        return substr($uriPath, 0, $pos + strlen($needle));
+    }
+
+    $sn = app_script_name();
+
+    return $sn !== '' ? $sn : '/index.php';
 }
 
 /**
@@ -21,7 +42,7 @@ function app_front_controller(): string
         return $cached;
     }
 
-    $script = app_script_name();
+    $script = app_effective_script_name();
     if ($script === '') {
         $cached = '';
 
@@ -81,7 +102,7 @@ function app_base_path(): string
         return $cached;
     }
 
-    $script = app_script_name();
+    $script = app_effective_script_name();
     if ($script === '' || $script === '/index.php') {
         $cached = '';
 
@@ -127,6 +148,29 @@ function url(string $path): string
             // Home: avoid /index.php/ or /index.php/index.php
             if ($p === '/' || $p === '/index.php') {
                 return $fc . $query;
+            }
+
+            // Other real PHP entry points in public/ (admin.php, login.php, logout.php, …) must not
+            // be expressed as index.php/admin.php — that is not a file and breaks the built-in server.
+            if (preg_match('#\.php$#', $p) && $p !== '/index.php') {
+                $base = app_base_path();
+
+                return ($base === '' ? '' : $base) . $p . $query;
+            }
+
+            // Static files live under document root (public/) and must not be routed as
+            // …/index.php/assets/… or the IDE/built-in server returns HTML/404 instead of CSS/JS.
+            $base = app_base_path();
+            $isStaticUnderDocroot = (
+                str_starts_with($p, '/assets/')
+                || str_starts_with($p, '/favicon.ico')
+                || (
+                    preg_match('#\.(?:css|js|mjs|map|ico|png|gif|jpg|jpeg|webp|svg|woff2|woff|ttf|otf|txt|xml|json|webmanifest)$#i', $p) === 1
+                    && !preg_match('#\.php$#i', $p)
+                )
+            );
+            if ($isStaticUnderDocroot) {
+                return ($base === '' ? '' : $base) . $p . $query;
             }
 
             return $fc . $p . $query;

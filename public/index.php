@@ -21,8 +21,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = str_replace('\\', '/', (string)$path);
 
-$scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-$scriptName = str_replace('\\', '/', (string)$scriptName);
+$scriptName = app_effective_script_name();
 
 /*
  * Valid app paths are defined in app/routes.php (GET/POST + path). After normalization below,
@@ -61,6 +60,16 @@ if (str_contains($path, '/index.php/')) {
 
 if ($path !== '/' && str_ends_with($path, '/')) {
     $path = rtrim($path, '/');
+}
+
+// Under …/index.php/…, a relative link "login.php" resolves to …/index.php/login.php (404).
+// Map those mistaken paths to the real front-controller routes.
+$fcPathAliases = [
+    '/login.php' => '/login',
+    '/signup.php' => '/signup',
+];
+if (isset($fcPathAliases[$path])) {
+    $path = $fcPathAliases[$path];
 }
 
 function route_match(array $route, string $method, string $path): bool

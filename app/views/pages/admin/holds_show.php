@@ -6,6 +6,8 @@
 /** @var ?string $error */
 /** @var string $csrf */
 /** @var array $hold_types */
+/** @var bool $can_manage_holds */
+$can_manage_holds = $can_manage_holds ?? false;
 ?>
 
 <section class="border-t border-white/10 bg-slate-950">
@@ -51,6 +53,7 @@
                     <div class="text-right">
                       <?php if ((int)$h['is_active'] === 1): ?>
                         <span class="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-100">Active</span>
+                        <?php if ($can_manage_holds): ?>
                         <form class="mt-3 inline" method="post" action="<?= htmlspecialchars(url('/admin/holds/clear')) ?>" onsubmit="return confirm('Clear this hold?');">
                           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
                           <input type="hidden" name="hold_id" value="<?= (int)$h['hold_id'] ?>" />
@@ -59,6 +62,7 @@
                             Clear hold
                           </button>
                         </form>
+                        <?php endif; ?>
                       <?php else: ?>
                         <span class="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300">Cleared</span>
                         <div class="mt-2 text-xs text-slate-500"><?= htmlspecialchars((string)($h['cleared_at'] ?? '')) ?></div>
@@ -73,6 +77,7 @@
 
         <div class="rounded-3xl border border-white/10 bg-white/5 p-6">
           <div class="text-sm font-semibold text-white">Add hold</div>
+          <?php if ($can_manage_holds): ?>
           <form class="mt-4 space-y-4" method="post" action="<?= htmlspecialchars(url('/admin/holds/add')) ?>">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
             <input type="hidden" name="student_id" value="<?= htmlspecialchars($student_id) ?>" />
@@ -92,6 +97,9 @@
               Place hold
             </button>
           </form>
+          <?php else: ?>
+          <p class="mt-3 text-sm text-slate-400">Your role can view holds only. Ask an admin or limited staff member to add or clear holds.</p>
+          <?php endif; ?>
         </div>
       </div>
     <?php endif; ?>
