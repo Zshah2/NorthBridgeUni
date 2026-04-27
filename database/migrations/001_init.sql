@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS students (
 CREATE TABLE IF NOT EXISTS faculty (
   faculty_id BIGINT UNSIGNED NOT NULL,
   office_number VARCHAR(50) NULL,
-  rank VARCHAR(50) NULL,
+  `rank` VARCHAR(50) NULL,
   faculty_type VARCHAR(50) NULL,
   PRIMARY KEY (faculty_id),
   CONSTRAINT fk_faculty_user FOREIGN KEY (faculty_id) REFERENCES users(user_id)

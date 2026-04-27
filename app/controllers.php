@@ -48,8 +48,8 @@ function handler_health(array $params): void
 function handler_admin_login_form(array $params): void
 {
     global $app;
-    if (auth_is_admin()) {
-        redirect('/admin');
+    if (auth_is_portal_user()) {
+        redirect('/admin.php');
     }
     render('pages/admin/login.php', [
         'app' => $app,
@@ -67,9 +67,9 @@ function handler_admin_login_submit(array $params): void
     $username = trim((string)($_POST['username'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
 
-    $ok = $username !== '' && $password !== '' && auth_login_admin($username, $password);
+    $ok = $username !== '' && $password !== '' && auth_login_portal_user($username, $password);
     if ($ok) {
-        redirect('/admin');
+        redirect('/admin.php');
     }
 
     render('pages/admin/login.php', [
@@ -83,8 +83,8 @@ function handler_admin_login_submit(array $params): void
 function handler_admin_signup_form(array $params): void
 {
     global $app;
-    if (auth_is_admin()) {
-        redirect('/admin');
+    if (auth_is_portal_user()) {
+        redirect('/admin.php');
     }
     render('pages/admin/signup.php', [
         'app' => $app,
@@ -99,8 +99,8 @@ function handler_admin_signup_submit(array $params): void
     global $app;
     csrf_require_valid();
 
-    if (auth_is_admin()) {
-        redirect('/admin');
+    if (auth_is_portal_user()) {
+        redirect('/admin.php');
     }
 
     $username = trim((string)($_POST['username'] ?? ''));
@@ -130,30 +130,26 @@ function handler_admin_signup_submit(array $params): void
         return;
     }
 
-    redirect('/login');
+    redirect('/login.php');
 }
 
 function handler_admin_logout(array $params): void
 {
     csrf_require_valid();
     auth_logout();
-    redirect('/login');
+    redirect('/login.php');
 }
 
 function handler_admin_dashboard(array $params): void
 {
-    global $app;
-    auth_require_admin();
-    render('pages/admin/dashboard.php', [
-        'app' => $app,
-        'csrf' => csrf_token(),
-    ], 'layouts/main.php');
+    auth_require_portal_user();
+    redirect('/admin.php');
 }
 
 function handler_admin_student_search(array $params): void
 {
     global $app;
-    auth_require_admin();
+    auth_require_portal_user();
     render('pages/admin/student_search.php', [
         'app' => $app,
         'student_id' => trim((string)($_GET['student_id'] ?? '')),
@@ -163,7 +159,7 @@ function handler_admin_student_search(array $params): void
 function handler_admin_student_show(array $params): void
 {
     global $app;
-    auth_require_admin();
+    auth_require_portal_user();
 
     $studentIdRaw = trim((string)($_GET['student_id'] ?? ''));
     $studentId = ctype_digit($studentIdRaw) ? (int)$studentIdRaw : null;
@@ -245,7 +241,7 @@ function handler_admin_student_show(array $params): void
 function handler_admin_schedule(array $params): void
 {
     global $app;
-    auth_require_admin();
+    auth_require_portal_user();
 
     $pdo = db();
     $terms = $pdo->query('SELECT term_id, code, name, start_date FROM terms ORDER BY start_date DESC, term_id DESC')->fetchAll();
@@ -310,7 +306,7 @@ function handler_admin_schedule(array $params): void
 function handler_admin_holds_index(array $params): void
 {
     global $app;
-    auth_require_admin();
+    auth_require_portal_user();
     render('pages/admin/holds_search.php', [
         'app' => $app,
         'student_id' => trim((string)($_GET['student_id'] ?? '')),
@@ -320,7 +316,7 @@ function handler_admin_holds_index(array $params): void
 function handler_admin_holds_show(array $params): void
 {
     global $app;
-    auth_require_admin();
+    auth_require_portal_user();
 
     $studentIdRaw = trim((string)($_GET['student_id'] ?? ''));
     $studentId = ctype_digit($studentIdRaw) ? (int)$studentIdRaw : null;
@@ -367,7 +363,7 @@ function handler_admin_holds_show(array $params): void
 
 function handler_admin_holds_add(array $params): void
 {
-    auth_require_admin();
+    auth_require_portal_user();
     csrf_require_valid();
 
     $studentId = isset($_POST['student_id']) && ctype_digit((string)$_POST['student_id']) ? (int)$_POST['student_id'] : null;
@@ -403,7 +399,7 @@ function handler_admin_holds_add(array $params): void
 
 function handler_admin_holds_clear(array $params): void
 {
-    auth_require_admin();
+    auth_require_portal_user();
     csrf_require_valid();
 
     $holdId = isset($_POST['hold_id']) && ctype_digit((string)$_POST['hold_id']) ? (int)$_POST['hold_id'] : null;

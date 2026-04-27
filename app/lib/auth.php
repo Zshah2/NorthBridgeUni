@@ -11,21 +11,54 @@ function auth_start_session(): void
     }
 }
 
-function auth_is_admin(): bool
+function auth_role(): ?string
 {
     auth_start_session();
-    return isset($_SESSION['auth']) && is_array($_SESSION['auth']) && ($_SESSION['auth']['role'] ?? null) === 'admin';
+    $r = $_SESSION['auth']['role'] ?? null;
+
+    return is_string($r) && $r !== '' ? $r : null;
+}
+
+function auth_is_admin(): bool
+{
+    return auth_role() === 'admin';
+}
+
+function auth_is_limited(): bool
+{
+    return auth_role() === 'limited';
+}
+
+function auth_is_viewer(): bool
+{
+    return auth_role() === 'viewer';
+}
+
+/** Any logged-in staff portal role */
+function auth_is_portal_user(): bool
+{
+    $r = auth_role();
+
+    return $r === 'admin' || $r === 'limited' || $r === 'viewer';
 }
 
 function auth_require_admin(): void
 {
     if (!auth_is_admin()) {
-        header('Location: ' . url('/login'));
+        header('Location: ' . url('/login.php'));
         exit;
     }
 }
 
-function auth_login_admin(string $username, string $password): bool
+function auth_require_portal_user(): void
+{
+    if (!auth_is_portal_user()) {
+        header('Location: ' . url('/login.php'));
+        exit;
+    }
+}
+
+function auth_login(string $username, string $password): bool
 {
     auth_start_session();
 
@@ -50,13 +83,38 @@ function auth_login_admin(string $username, string $password): bool
     return true;
 }
 
+function auth_login_portal_user(string $username, string $password): bool
+{
+    if (!auth_login($username, $password)) {
+        return false;
+    }
+
+    return auth_is_portal_user();
+}
+
+function auth_login_admin(string $username, string $password): bool
+{
+    if (!auth_login($username, $password)) {
+        return false;
+    }
+
+    return auth_is_admin();
+}
+
 /**
  * Creates an admin auth user.
- * Returns [ok, errorMessage].
  *
  * @return array{0:bool,1:?string}
  */
 function auth_create_admin(string $username, string $password): array
+{
+    return auth_create_user_with_role($username, $password, 'admin');
+}
+
+/**
+ * @return array{0:bool,1:?string}
+ */
+function auth_create_user_with_role(string $username, string $password, string $role): array
 {
     $username = trim($username);
     if ($username === '') {
@@ -68,6 +126,9 @@ function auth_create_admin(string $username, string $password): array
     if (strlen($password) < 8) {
         return [false, 'Password must be at least 8 characters.'];
     }
+    if (!in_array($role, ['admin', 'limited', 'viewer'], true)) {
+        return [false, 'Invalid role.'];
+    }
 
     $hash = password_hash($password, PASSWORD_DEFAULT);
     if ($hash === false) {
@@ -76,14 +137,14 @@ function auth_create_admin(string $username, string $password): array
 
     $pdo = db();
     try {
-        $stmt = $pdo->prepare('INSERT INTO auth_users (username, password_hash, role) VALUES (?, ?, "admin")');
-        $stmt->execute([$username, $hash]);
+        $stmt = $pdo->prepare('INSERT INTO auth_users (username, password_hash, role) VALUES (?, ?, ?)');
+        $stmt->execute([$username, $hash, $role]);
     } catch (PDOException $e) {
-        // 23000 is integrity constraint violation (duplicate username)
-        if ($e->getCode() === '23000') {
+        if ($e->getCode() === '23000' || (isset($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062)) {
             return [false, 'That username is already taken.'];
         }
-        return [false, 'Failed to create admin user.'];
+
+        return [false, 'Failed to create user.'];
     }
 
     return [true, null];
@@ -99,4 +160,3 @@ function auth_logout(): void
     }
     session_destroy();
 }
-

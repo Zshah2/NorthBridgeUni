@@ -22,9 +22,23 @@ foreach ($files as $file) {
         fwrite(STDERR, "Failed to read: $file\n");
         exit(1);
     }
-    $pdo->exec($sql);
-    fwrite(STDOUT, "Applied: " . basename($file) . "\n");
+    $sql = trim($sql);
+    if ($sql === '') {
+        continue;
+    }
+    try {
+        $pdo->exec($sql);
+        fwrite(STDOUT, 'Applied: ' . basename($file) . "\n");
+    } catch (PDOException $e) {
+        $msg = $e->getMessage();
+        // Idempotent re-runs: duplicate column / duplicate key name / already exists
+        if (preg_match('/Duplicate column|duplicate key name|already exists|1060|1061|1050/i', $msg)) {
+            fwrite(STDOUT, 'Skipped (already applied): ' . basename($file) . "\n");
+            continue;
+        }
+        fwrite(STDERR, basename($file) . ': ' . $msg . "\n");
+        exit(1);
+    }
 }
 
 fwrite(STDOUT, "Done.\n");
-

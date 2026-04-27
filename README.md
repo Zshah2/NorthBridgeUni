@@ -1,72 +1,63 @@
 ## Northbridge College (CollegeWeb)
 
-Plain PHP + modern frontend (Tailwind + small JS). Database (MySQL) and CSV import will be added in later steps.
+PHP + MySQL (PDO) + Tailwind. Public site uses the front controller (`public/index.php`); **staff** use **`public/login.php`** and the unified **`public/admin.php`** dashboard.
 
-### Local MySQL setup (for live data)
-Set environment variables when running PHP, or configure your server env:
-- `DB_HOST` (default `127.0.0.1`)
-- `DB_PORT` (default `3306`)
-- `DB_NAME` (default `collegeweb`)
-- `DB_USER` (default `root`)
-- `DB_PASS` (default empty)
-- `APP_DEBUG` — set to `1` or `true` for detailed error pages during development; leave unset or `0` for demos (safe generic errors + stack traces in logs only).
+### Demo logins (after seed scripts)
 
-Create the database (example):
+| Role | Username | Password |
+|------|-----------|----------|
+| Full admin | `mainadmin` | `Main@1234` |
+| Limited admin | `limitedadmin` | `Limited@1234` |
+| Viewer | `staff` | `Staff@1234` |
 
-```sql
-CREATE DATABASE collegeweb CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-```
+### Database credentials
 
-Then run:
+The app reads **`app/config/database.php`**, then merges **`app/config/database.local.php`** if it exists (copy from **`app/config/database.local.php.example`**). Environment variables `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` override the file when set.
+
+If you see **“Cannot connect to MySQL”** on the login page, MySQL may be stopped **or** the username/password does not match (default is `root` with an empty password).
+
+### Setup
 
 ```bash
+# Create DB (example)
+mysql -e "CREATE DATABASE collegeweb CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+
+# Option A: env vars
+export DB_HOST=127.0.0.1 DB_PORT=3306 DB_NAME=collegeweb DB_USER=… DB_PASS=…
+
+# Option B: copy app/config/database.local.php.example → app/config/database.local.php and edit
+
 php scripts/migrate.php
-php scripts/seed_admin.php admin yourPassword
 php scripts/import_all.php
 php scripts/seed_demo_registration.php
+
+php scripts/seed_superadmin.php mainadmin Main@1234
+php scripts/seed_limited_admin.php limitedadmin Limited@1234
+php scripts/seed_staff.php
 ```
 
-The demo seed adds term **FA26**, two sections (**ENG101**, **HIS103**), enrollments for student **`123123`**, and a sample **Bursar** hold so admin schedule and holds pages are testable.
+Optional: `APP_DEBUG=1` for verbose errors during development.
 
-Department contact emails in `Data/department.csv` use the demo domain **`@northbridge.edu`**. If you edit that file, re-run `php scripts/import_all.php` so `departments.email` in MySQL matches (existing rows are updated on `dept_id` match).
+### URLs
 
-### Grading / demo checklist
+- **Marketing / home:** `/` (via `public/index.php` + router)
+- **Staff login:** `public/login.php` (direct file — works with PhpStorm built-in server)
+- **Admin dashboard:** `public/admin.php` — People lookup, master schedule, directory, registration (add/drop with holds / conflicts / credits / prereqs / waitlist)
 
-Step-by-step flows (including failure paths) are in [docs/PROFESSOR_TEST_CHECKLIST.md](docs/PROFESSOR_TEST_CHECKLIST.md).
-
-### Smoke test (optional)
-
-With the built-in server running:
-
-```bash
-php scripts/smoke_check.php http://127.0.0.1:8000
-```
-
-### Requirements
-- PHP 8+ (7.4+ usually works, but 8+ recommended)
-
-### Run locally (built-in PHP server)
-From the project root, use the **router script** so paths like `/login` reach `index.php` (otherwise you can get a real server “404” with no PHP page):
+### Built-in server
 
 ```bash
 php -S localhost:8000 -t public public/router.php
 ```
 
-Then open `http://localhost:8000/login` etc.
+Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 
-**Apache:** [public/.htaccess](public/.htaccess) sends unknown paths to `index.php` when `mod_rewrite` is enabled and `AllowOverride` permits it.
+### Requirements
 
-**Real `login.php` / `signup.php` files:** [public/login.php](public/login.php) and [public/signup.php](public/signup.php) only **redirect** to `index.php/login` and `index.php/signup` so PhpStorm or bookmarks like `…/public/login.php` still reach the app.
+- PHP 8+
+- MySQL 8+ (or compatible)
 
-If you open the site as a **subpath** (for example `http://localhost:8000/public/` or PhpStorm’s `.../public/index.php` URL), links and redirects use an automatic **base path** from `SCRIPT_NAME`. You can override it with `APP_BASE_PATH` (no trailing slash), e.g. `export APP_BASE_PATH=/CollegWeb/public`.
+### Project notes
 
-**PhpStorm built-in server** (`http://localhost:63342/...`) does not rewrite pretty URLs like `/CollegWeb/public/login` to `index.php`, so those requests never hit PHP. This project **auto-generates** links as `/CollegWeb/public/index.php/login` when the host contains `:63342`. To force that behavior elsewhere, set `APP_USE_INDEX_PHP_LINKS=1`; to disable on port 63342, set `APP_USE_INDEX_PHP_LINKS=0`.
-
-### PhpStorm
-- Open this folder as a project.
-- Set DocumentRoot to `public/` if using a local server config.
-
-### Project log
-
-Notable changes and why they happened: [docs/PROJECT_LOG.md](docs/PROJECT_LOG.md).
-
+- Department emails in `Data/department.csv` use `@northbridge.edu`; re-run `import_all.php` after edits.
+- Older checklists: [docs/PROFESSOR_TEST_CHECKLIST.md](docs/PROFESSOR_TEST_CHECKLIST.md) if present.

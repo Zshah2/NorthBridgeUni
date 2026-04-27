@@ -1,0 +1,18 @@
+<?php
+
+/**
+ * Copy this file to database.local.php (same folder) and set your real credentials.
+ * database.local.php is gitignored — safe for local passwords.
+ *
+ * Env vars DB_HOST / DB_USER / DB_PASS etc. still override these if set.
+ */
+
+declare(strict_types=1);
+
+return [
+    'host' => '127.0.0.1',
+    'port' => 3306,
+    'database' => 'collegeweb',
+    'username' => 'collegeweb',
+    'password' => 'CHANGE_ME',
+];

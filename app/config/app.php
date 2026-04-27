@@ -14,11 +14,11 @@ return [
         ['label' => 'Departments', 'href' => '#departments'],
         ['label' => 'News', 'href' => '#news'],
         ['label' => 'Contact', 'href' => '#contact'],
-        ['label' => 'Login', 'href' => '/login'],
+        ['label' => 'Login', 'href' => '/login.php'],
     ],
     'cta' => [
         'primary' => ['label' => 'Apply Now', 'href' => '#admissions'],
-        'secondary' => ['label' => 'Login', 'href' => '/login'],
+        'secondary' => ['label' => 'Staff login', 'href' => '/login.php'],
     ],
 ];
 

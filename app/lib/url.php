@@ -3,7 +3,16 @@
 declare(strict_types=1);
 
 /**
- * Full web path to index.php (e.g. /CollegWeb/public/index.php) for link generation.
+ * Normalized request script path (e.g. /CollegWeb/public/login.php).
+ */
+function app_script_name(): string
+{
+    return str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+}
+
+/**
+ * Path to the front controller (index.php) for the app, even when the current
+ * request is login.php, admin.php, etc. (same directory as index.php).
  */
 function app_front_controller(): string
 {
@@ -12,21 +21,32 @@ function app_front_controller(): string
         return $cached;
     }
 
-    $script = $_SERVER['SCRIPT_NAME'] ?? '';
-    if (!is_string($script) || !str_ends_with($script, '/index.php')) {
+    $script = app_script_name();
+    if ($script === '') {
         $cached = '';
 
         return $cached;
     }
 
-    $cached = str_replace('\\', '/', $script);
+    if (str_ends_with($script, '/index.php')) {
+        $cached = $script;
+
+        return $cached;
+    }
+
+    $dir = dirname($script);
+    if ($dir === '/' || $dir === '.') {
+        $cached = '/index.php';
+    } else {
+        $cached = $dir . '/index.php';
+    }
 
     return $cached;
 }
 
 /**
  * JetBrains / PhpStorm built-in server (port 63342) does not rewrite /public/login → index.php.
- * In that case links must be /public/index.php/login. Opt in/out with APP_USE_INDEX_PHP_LINKS (1/0/true/false).
+ * In that case links use /public/index.php/... . Opt in/out with APP_USE_INDEX_PHP_LINKS (1/0/true/false).
  */
 function app_use_index_php_in_links(): bool
 {
@@ -44,7 +64,7 @@ function app_use_index_php_in_links(): bool
 }
 
 /**
- * URL prefix when the app is not served at the web server root (derived from SCRIPT_NAME …/index.php).
+ * URL prefix when the app is not served at the web root (same folder as index.php).
  * Override with env APP_BASE_PATH (no trailing slash), e.g. APP_BASE_PATH=/CollegWeb/public
  */
 function app_base_path(): string
@@ -61,21 +81,25 @@ function app_base_path(): string
         return $cached;
     }
 
-    $script = $_SERVER['SCRIPT_NAME'] ?? '';
-    if (!is_string($script) || $script === '' || $script === '/index.php') {
+    $script = app_script_name();
+    if ($script === '' || $script === '/index.php') {
         $cached = '';
 
         return $cached;
     }
 
     if (str_ends_with($script, '/index.php')) {
-        $dir = substr($script, 0, -strlen('/index.php'));
-        $cached = $dir === '/' ? '' : rtrim($dir, '/');
-
-        return $cached;
+        $base = substr($script, 0, -strlen('/index.php'));
+    } else {
+        $base = dirname($script);
     }
 
-    $cached = '';
+    $base = rtrim($base, '/');
+    if ($base === '' || $base === '/') {
+        $cached = '';
+    } else {
+        $cached = $base;
+    }
 
     return $cached;
 }
@@ -96,14 +120,24 @@ function url(string $path): string
     }
 
     $p = '/' . ltrim($path, '/');
+
     if (app_use_index_php_in_links()) {
         $fc = app_front_controller();
         if ($fc !== '') {
+            // Home: avoid /index.php/ or /index.php/index.php
+            if ($p === '/' || $p === '/index.php') {
+                return $fc . $query;
+            }
+
             return $fc . $p . $query;
         }
     }
 
     $base = app_base_path();
+
+    if ($p === '/index.php') {
+        return ($base === '' ? '' : $base) . '/index.php' . $query;
+    }
 
     return ($base === '' ? '' : $base) . $p . $query;
 }

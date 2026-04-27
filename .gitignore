@@ -5,6 +5,9 @@
 .env
 .env.*
 
+# Local DB overrides (copy from database.local.php.example)
+app/config/database.local.php
+
 # Logs
 *.log
 

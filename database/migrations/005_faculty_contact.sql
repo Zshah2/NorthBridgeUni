@@ -1,0 +1,4 @@
+ALTER TABLE faculty
+  ADD COLUMN email VARCHAR(255) NULL,
+  ADD COLUMN phone_number VARCHAR(40) NULL,
+  ADD COLUMN hire_date DATE NULL;
