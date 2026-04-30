@@ -15,6 +15,14 @@
 /** @var array $sections */
 /** @var array $dept_rows */
 /** @var array $course_rows */
+/** @var int $student_total */
+/** @var int $faculty_total */
+/** @var int $stu_page */
+/** @var int $fac_page */
+/** @var int $schedule_per_page */
+/** @var bool $schedule_unified_roster */
+/** @var array $roster_rows */
+/** @var int $roster_total */
 $schedule_panels = $schedule_panels ?? [];
 $schedule_embed_preservation = $schedule_embed_preservation ?? false;
 $search_q = $search_q ?? '';
@@ -28,6 +36,17 @@ $course_rows = $course_rows ?? [];
 $terms = $terms ?? [];
 $sections = $sections ?? [];
 $valid_dept_ids_for_select = $valid_dept_ids_for_select ?? [];
+$student_total = (int)($student_total ?? 0);
+$faculty_total = (int)($faculty_total ?? 0);
+$stu_page = max(1, (int)($stu_page ?? 1));
+$fac_page = max(1, (int)($fac_page ?? 1));
+$schedule_per_page = (int)($schedule_per_page ?? 50);
+if (!in_array($schedule_per_page, [25, 50, 100, 200], true)) {
+    $schedule_per_page = 50;
+}
+$roster_rows = $roster_rows ?? [];
+$roster_total = (int)($roster_total ?? 0);
+$schedule_unified_roster = !empty($schedule_unified_roster);
 /** GET form target: routed URL, or admin.php?view=schedule when embedded in public/admin.php */
 $schedule_form_action = isset($schedule_form_action) && is_string($schedule_form_action) && $schedule_form_action !== ''
     ? $schedule_form_action
@@ -35,14 +54,139 @@ $schedule_form_action = isset($schedule_form_action) && is_string($schedule_form
 $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
     ? url('/admin.php?view=schedule')
     : url('/admin/schedule');
+/** GET forms must send view=schedule as a field; browsers often strip ?view= from action on submit */
+$schedule_needs_view_hidden = str_contains((string)$schedule_form_action, 'admin.php');
+$schedule_embedded = $schedule_needs_view_hidden;
+$schedule_href_people = $schedule_embedded
+    ? url('/admin.php?view=people')
+    : url('/admin/students/search');
+$schedule_href_student_record = static function (int $studentId) use ($schedule_embedded): string {
+    return $schedule_embedded
+        ? url('/admin.php?view=people&id=' . $studentId)
+        : url('/admin/students/show?student_id=' . $studentId);
+};
+$schedule_href_faculty_person = static function (int $facultyId): string {
+    return url('/admin.php?view=people&id=' . $facultyId);
+};
+$schedule_href_add_person = url('/admin.php?view=people#add-person');
+/** Linked ID styling: sky = student, violet = faculty (matches admin ID lookup badges). */
+$schedule_id_link_student = 'inline-flex rounded-md bg-sky-100 px-2 py-0.5 font-mono text-sm font-semibold tabular-nums text-sky-950 ring-1 ring-inset ring-sky-200/90 hover:bg-sky-200/90';
+$schedule_id_link_faculty = 'inline-flex rounded-md bg-violet-100 px-2 py-0.5 font-mono text-sm font-semibold tabular-nums text-violet-950 ring-1 ring-inset ring-violet-200/90 hover:bg-violet-200/90';
+$fmtContact = static function ($v): string {
+    $s = trim((string)($v ?? ''));
+
+    return $s === '' ? '—' : htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+};
+$telHref = static function (string $display): string {
+    $digits = preg_replace('/\D+/', '', $display);
+    if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+        $digits = substr($digits, 1);
+    }
+    if (strlen($digits) === 10) {
+        return '+1' . $digits;
+    }
+
+    return $digits !== '' ? $digits : preg_replace('/\s+/', '', $display);
+};
+$schedulePagerHref = static function (int $stuP, int $facP) use (
+    $schedule_form_action,
+    $schedule_needs_view_hidden,
+    $schedule_panels,
+    $search_q,
+    $course_q,
+    $catalog_dept,
+    $term_id,
+    $dept_id,
+    $sec_q,
+    $schedule_per_page,
+    $schedule_unified_roster
+): string {
+    $q = [];
+    if (!empty($schedule_needs_view_hidden)) {
+        $q['view'] = 'schedule';
+    }
+    $q['sched_filter'] = '1';
+    foreach ($schedule_panels as $pk => $on) {
+        if ($on) {
+            $q['panels[' . $pk . ']'] = '1';
+        }
+    }
+    if ($search_q !== '') {
+        $q['q'] = $search_q;
+    }
+    if ($course_q !== '') {
+        $q['course_q'] = $course_q;
+    }
+    if ($catalog_dept !== '') {
+        $q['catalog_dept'] = $catalog_dept;
+    }
+    if (($term_id ?? null) !== null) {
+        $q['term_id'] = (string)(int)$term_id;
+    }
+    if (($dept_id ?? '') !== '') {
+        $q['dept_id'] = $dept_id;
+    }
+    if (($sec_q ?? '') !== '') {
+        $q['sec_q'] = $sec_q;
+    }
+    $q['per_page'] = (string)$schedule_per_page;
+    $q['stu_page'] = (string)$stuP;
+    $q['fac_page'] = $schedule_unified_roster ? '1' : (string)$facP;
+    $sep = str_contains($schedule_form_action, '?') ? '&' : '?';
+
+    return $schedule_form_action . $sep . http_build_query($q);
+};
+/** @return list<int|null> page numbers; null = ellipsis gap */
+$schedulePaginationPages = static function (int $current, int $last): array {
+    if ($last <= 1) {
+        return [];
+    }
+    if ($last <= 11) {
+        return range(1, $last);
+    }
+    $out = [1];
+    $start = max(2, $current - 2);
+    $end = min($last - 1, $current + 2);
+    if ($start > 2) {
+        $out[] = null;
+    }
+    for ($i = $start; $i <= $end; $i++) {
+        $out[] = $i;
+    }
+    if ($end < $last - 1) {
+        $out[] = null;
+    }
+    $out[] = $last;
+
+    return $out;
+};
 ?>
 
 <h1 class="text-2xl font-semibold text-slate-900">Master schedule</h1>
 <p class="mt-2 text-sm text-slate-600">
-  Filter students and faculty by ID or name; narrow departments and courses; choose which tables to show; refine sections by term, department, and text (course, instructor, room, time).
+  Filter students and faculty by ID, name, email, or phone; narrow departments and courses; choose which tables to show; refine sections by term, department, and text (course, instructor, room, time).
 </p>
 
+<details class="group mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 shadow-sm open:ring-1 open:ring-indigo-100">
+  <summary class="cursor-pointer list-none text-sm font-semibold text-indigo-950 [&::-webkit-details-marker]:hidden">
+    Admin shortcuts — update records, registration, directory
+  </summary>
+  <p class="mt-3 text-xs text-slate-600">
+    Open other admin tools without using the sidebar. Row IDs in the tables below link to a person when available.
+  </p>
+  <div class="mt-4 flex flex-wrap gap-2">
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedule_href_people) ?>">ID lookup</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Directory</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
+  </div>
+</details>
+
 <form class="mt-6 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
+  <?php if (!empty($schedule_needs_view_hidden)): ?>
+    <input type="hidden" name="view" value="schedule" />
+  <?php endif; ?>
   <input type="hidden" name="sched_filter" value="1" />
   <?php if (($term_id ?? null) !== null): ?>
     <input type="hidden" name="term_id" value="<?= (int)$term_id ?>" />
@@ -77,7 +221,7 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
         id="schedule-q"
         name="q"
         value="<?= htmlspecialchars($search_q) ?>"
-        placeholder="ID or name"
+        placeholder="ID, name, email, or phone"
         class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
         autocomplete="off"
       />
@@ -103,16 +247,164 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
     </div>
   </div>
 
+  <div class="flex flex-wrap items-end gap-4 border-t border-slate-100 pt-4">
+    <input type="hidden" name="stu_page" value="1" />
+    <input type="hidden" name="fac_page" value="1" />
+    <div>
+      <label class="block text-xs font-semibold uppercase text-slate-500" for="schedule-per-page">Rows per page (students &amp; faculty)</label>
+      <select id="schedule-per-page" name="per_page" class="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
+        <?php foreach ([25, 50, 100, 200] as $pp): ?>
+          <option value="<?= (int)$pp ?>"<?= $schedule_per_page === $pp ? ' selected' : '' ?>><?= (int)$pp ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+  </div>
+
   <div class="flex flex-wrap items-center gap-3">
     <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Apply filters</button>
     <a href="<?= htmlspecialchars($schedule_reset_href) ?>" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset everything</a>
+    <a href="<?= htmlspecialchars($schedule_href_people) ?>" class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-900 hover:bg-indigo-100">Update information</a>
+    <a href="<?= htmlspecialchars($schedule_href_add_person) ?>" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100">Add person</a>
   </div>
 </form>
 
-<?php if (!empty($schedule_panels['students'])): ?>
-  <h2 class="mt-10 text-lg font-semibold text-slate-900">Students <span class="text-sm font-normal text-slate-500">(<?= count($student_rows) ?>)</span></h2>
-  <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-full text-left text-sm">
+<?php if ($schedule_unified_roster): ?>
+  <?php
+    $roster_page_count = max(1, (int)ceil($roster_total / max(1, $schedule_per_page)));
+    $roster_row_from = $roster_total === 0 ? 0 : (($stu_page - 1) * $schedule_per_page + 1);
+    $roster_row_to = min($roster_total, $stu_page * $schedule_per_page);
+    $rosterPagesList = $schedulePaginationPages($stu_page, $roster_page_count);
+  ?>
+  <div class="mt-10 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+    <h2 class="text-lg font-semibold text-slate-900">
+      People (students + faculty)
+      <span class="block text-sm font-normal text-slate-500 sm:inline sm:pl-1">
+        <?= (int)$roster_total ?> total<?php if ($roster_total > 0): ?> · rows <?= (int)$roster_row_from ?>–<?= (int)$roster_row_to ?><?php endif; ?>
+      </span>
+    </h2>
+    <?php if ($roster_total > $schedule_per_page): ?>
+      <nav class="flex max-w-full flex-col gap-2 text-sm" aria-label="Roster pagination">
+        <div class="-mx-1 flex max-w-full items-center gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+          <?php if ($stu_page > 1): ?>
+            <a class="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page - 1, 1)) ?>">Prev</a>
+          <?php endif; ?>
+          <?php foreach ($rosterPagesList as $pn): ?>
+            <?php if ($pn === null): ?>
+              <span class="shrink-0 px-1 text-slate-400 select-none" aria-hidden="true">…</span>
+            <?php elseif ((int)$pn === (int)$stu_page): ?>
+              <span class="grid h-8 min-w-[2rem] shrink-0 place-items-center rounded-lg bg-indigo-600 px-2 text-sm font-bold text-white shadow-sm" aria-current="page"><?= (int)$pn ?></span>
+            <?php else: ?>
+              <a class="grid h-8 min-w-[2rem] shrink-0 place-items-center rounded-lg border border-slate-200 bg-white px-2 font-semibold text-indigo-800 shadow-sm hover:border-indigo-200 hover:bg-indigo-50" href="<?= htmlspecialchars($schedulePagerHref((int)$pn, 1)) ?>"><?= (int)$pn ?></a>
+            <?php endif; ?>
+          <?php endforeach; ?>
+          <?php if ($stu_page < $roster_page_count): ?>
+            <a class="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page + 1, 1)) ?>">Next</a>
+          <?php endif; ?>
+        </div>
+        <span class="text-xs text-slate-500">Page <?= (int)$stu_page ?> of <?= (int)$roster_page_count ?> · scroll numbers on small screens</span>
+      </nav>
+    <?php endif; ?>
+  </div>
+
+  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-[64rem] w-full text-left text-sm">
+      <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+        <tr>
+          <th class="px-4 py-3">Role</th>
+          <th class="px-4 py-3">ID</th>
+          <th class="px-4 py-3">Last name</th>
+          <th class="px-4 py-3">First name</th>
+          <th class="px-4 py-3">Email</th>
+          <th class="px-4 py-3">Phone</th>
+          <th class="px-4 py-3">Office</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        <?php foreach ($roster_rows as $r): ?>
+          <?php
+            $isFac = (($r['roster_kind'] ?? '') === 'Faculty');
+            $uid = (int)($r['user_id'] ?? 0);
+            $idHref = $isFac ? $schedule_href_faculty_person($uid) : $schedule_href_student_record($uid);
+          ?>
+          <tr class="hover:bg-slate-50/80">
+            <td class="px-4 py-3 text-xs font-semibold uppercase tracking-wide <?= $isFac ? 'text-violet-700' : 'text-sky-800' ?>">
+              <?= htmlspecialchars((string)($r['roster_kind'] ?? '')) ?>
+            </td>
+            <td class="px-4 py-3">
+              <a class="<?= $isFac ? htmlspecialchars($schedule_id_link_faculty, ENT_QUOTES, 'UTF-8') : htmlspecialchars($schedule_id_link_student, ENT_QUOTES, 'UTF-8') ?>" href="<?= htmlspecialchars($idHref) ?>"><?= $uid ?></a>
+            </td>
+            <td class="px-4 py-3"><?= htmlspecialchars((string)($r['last_name'] ?? '')) ?></td>
+            <td class="px-4 py-3"><?= htmlspecialchars((string)($r['first_name'] ?? '')) ?></td>
+            <td class="px-4 py-3 max-w-[14rem] truncate text-slate-700">
+              <?php $em = trim((string)($r['email'] ?? '')); ?>
+              <?php if ($em !== ''): ?>
+                <a class="text-indigo-700 hover:underline" href="mailto:<?= htmlspecialchars($em, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($em) ?></a>
+              <?php else: ?>
+                <span class="text-slate-400"><?= $fmtContact('') ?></span>
+              <?php endif; ?>
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-slate-700">
+              <?php $ph = trim((string)($r['phone_number'] ?? '')); ?>
+              <?php if ($ph !== ''): ?>
+                <a class="hover:underline" href="tel:<?= htmlspecialchars($telHref($ph), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($ph) ?></a>
+              <?php else: ?>
+                <span class="text-slate-400"><?= $fmtContact('') ?></span>
+              <?php endif; ?>
+            </td>
+            <td class="px-4 py-3 text-slate-600"><?= $isFac ? htmlspecialchars((string)($r['office_number'] ?? '')) : '—' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        <?php if (!$roster_rows): ?>
+          <tr>
+            <td class="px-4 py-6 text-center text-slate-500" colspan="7">
+              <?= $search_q !== '' ? 'No people match this search.' : 'No people rows in the database yet.' ?>
+            </td>
+          </tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+<?php endif; ?>
+
+<?php if (!$schedule_unified_roster && !empty($schedule_panels['students'])): ?>
+  <?php
+    $stu_page_count = max(1, (int)ceil($student_total / max(1, $schedule_per_page)));
+    $stu_row_from = $student_total === 0 ? 0 : (($stu_page - 1) * $schedule_per_page + 1);
+    $stu_row_to = min($student_total, $stu_page * $schedule_per_page);
+  ?>
+  <div class="mt-10 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+    <h2 class="text-lg font-semibold text-slate-900">
+      Students
+      <span class="block text-sm font-normal text-slate-500 sm:inline sm:pl-1">
+        <?= (int)$student_total ?> total<?php if ($student_total > 0): ?> · rows <?= (int)$stu_row_from ?>–<?= (int)$stu_row_to ?><?php endif; ?>
+      </span>
+    </h2>
+    <?php if ($student_total > $schedule_per_page): ?>
+      <?php $stuPagesList = $schedulePaginationPages($stu_page, $stu_page_count); ?>
+      <nav class="flex max-w-full flex-col gap-2 text-sm" aria-label="Students pagination">
+        <div class="-mx-1 flex max-w-full items-center gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+          <?php if ($stu_page > 1): ?>
+            <a class="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page - 1, $fac_page)) ?>">Prev</a>
+          <?php endif; ?>
+          <?php foreach ($stuPagesList as $pn): ?>
+            <?php if ($pn === null): ?>
+              <span class="shrink-0 px-1 text-slate-400 select-none" aria-hidden="true">…</span>
+            <?php elseif ((int)$pn === (int)$stu_page): ?>
+              <span class="grid h-8 min-w-[2rem] shrink-0 place-items-center rounded-lg bg-indigo-600 px-2 text-sm font-bold text-white shadow-sm" aria-current="page"><?= (int)$pn ?></span>
+            <?php else: ?>
+              <a class="grid h-8 min-w-[2rem] shrink-0 place-items-center rounded-lg border border-slate-200 bg-white px-2 font-semibold text-indigo-800 shadow-sm hover:border-indigo-200 hover:bg-indigo-50" href="<?= htmlspecialchars($schedulePagerHref((int)$pn, $fac_page)) ?>"><?= (int)$pn ?></a>
+            <?php endif; ?>
+          <?php endforeach; ?>
+          <?php if ($stu_page < $stu_page_count): ?>
+            <a class="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page + 1, $fac_page)) ?>">Next</a>
+          <?php endif; ?>
+        </div>
+        <span class="text-xs text-slate-500">Page <?= (int)$stu_page ?> of <?= (int)$stu_page_count ?> · scroll numbers on small screens</span>
+      </nav>
+    <?php endif; ?>
+  </div>
+  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-[88rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
           <th class="px-4 py-3">Student ID</th>
@@ -122,23 +414,43 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
           <th class="px-4 py-3">Type</th>
           <th class="px-4 py-3">City</th>
           <th class="px-4 py-3">State</th>
+          <th class="px-4 py-3">Email</th>
+          <th class="px-4 py-3">Phone</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-200">
         <?php foreach ($student_rows as $r): ?>
           <tr class="hover:bg-slate-50/80">
-            <td class="px-4 py-3 font-mono font-semibold text-indigo-700"><?= (int)$r['user_id'] ?></td>
+            <td class="px-4 py-3">
+              <a class="<?= htmlspecialchars($schedule_id_link_student, ENT_QUOTES, 'UTF-8') ?>" href="<?= htmlspecialchars($schedule_href_student_record((int)$r['user_id'])) ?>"><?= (int)$r['user_id'] ?></a>
+            </td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['last_name']) ?></td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['first_name']) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['middle_name'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)$r['user_type']) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['city'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['state'] ?? '')) ?></td>
+            <td class="px-4 py-3 max-w-[14rem] truncate text-slate-700">
+              <?php $em = trim((string)($r['email'] ?? '')); ?>
+              <?php if ($em !== ''): ?>
+                <a class="text-indigo-700 hover:underline" href="mailto:<?= htmlspecialchars($em, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($em) ?></a>
+              <?php else: ?>
+                <span class="text-slate-400"><?= $fmtContact('') ?></span>
+              <?php endif; ?>
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-slate-700">
+              <?php $ph = trim((string)($r['phone_number'] ?? '')); ?>
+              <?php if ($ph !== ''): ?>
+                <a class="hover:underline" href="tel:<?= htmlspecialchars($telHref($ph), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($ph) ?></a>
+              <?php else: ?>
+                <span class="text-slate-400"><?= $fmtContact('') ?></span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
         <?php if (!$student_rows): ?>
           <tr>
-            <td class="px-4 py-6 text-center text-slate-500" colspan="7">
+            <td class="px-4 py-6 text-center text-slate-500" colspan="9">
               <?= $search_q !== '' ? 'No students match this search.' : 'No student rows in the database yet.' ?>
             </td>
           </tr>
@@ -148,10 +460,45 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
   </div>
 <?php endif; ?>
 
-<?php if (!empty($schedule_panels['faculty'])): ?>
-  <h2 class="mt-10 text-lg font-semibold text-slate-900">Faculty <span class="text-sm font-normal text-slate-500">(<?= count($faculty_rows) ?>)</span></h2>
-  <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-full text-left text-sm">
+<?php if (!$schedule_unified_roster && !empty($schedule_panels['faculty'])): ?>
+  <?php
+    $fac_page_count = max(1, (int)ceil($faculty_total / max(1, $schedule_per_page)));
+    $fac_row_from = $faculty_total === 0 ? 0 : (($fac_page - 1) * $schedule_per_page + 1);
+    $fac_row_to = min($faculty_total, $fac_page * $schedule_per_page);
+  ?>
+  <div class="mt-10 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+    <h2 class="text-lg font-semibold text-slate-900">
+      Faculty
+      <span class="block text-sm font-normal text-slate-500 sm:inline sm:pl-1">
+        <?= (int)$faculty_total ?> total<?php if ($faculty_total > 0): ?> · rows <?= (int)$fac_row_from ?>–<?= (int)$fac_row_to ?><?php endif; ?>
+      </span>
+    </h2>
+    <?php if ($faculty_total > $schedule_per_page): ?>
+      <?php $facPagesList = $schedulePaginationPages($fac_page, $fac_page_count); ?>
+      <nav class="flex max-w-full flex-col gap-2 text-sm" aria-label="Faculty pagination">
+        <div class="-mx-1 flex max-w-full items-center gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+          <?php if ($fac_page > 1): ?>
+            <a class="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page, $fac_page - 1)) ?>">Prev</a>
+          <?php endif; ?>
+          <?php foreach ($facPagesList as $pn): ?>
+            <?php if ($pn === null): ?>
+              <span class="shrink-0 px-1 text-slate-400 select-none" aria-hidden="true">…</span>
+            <?php elseif ((int)$pn === (int)$fac_page): ?>
+              <span class="grid h-8 min-w-[2rem] shrink-0 place-items-center rounded-lg bg-indigo-600 px-2 text-sm font-bold text-white shadow-sm" aria-current="page"><?= (int)$pn ?></span>
+            <?php else: ?>
+              <a class="grid h-8 min-w-[2rem] shrink-0 place-items-center rounded-lg border border-slate-200 bg-white px-2 font-semibold text-indigo-800 shadow-sm hover:border-indigo-200 hover:bg-indigo-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page, (int)$pn)) ?>"><?= (int)$pn ?></a>
+            <?php endif; ?>
+          <?php endforeach; ?>
+          <?php if ($fac_page < $fac_page_count): ?>
+            <a class="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedulePagerHref($stu_page, $fac_page + 1)) ?>">Next</a>
+          <?php endif; ?>
+        </div>
+        <span class="text-xs text-slate-500">Page <?= (int)$fac_page ?> of <?= (int)$fac_page_count ?> · scroll numbers on small screens</span>
+      </nav>
+    <?php endif; ?>
+  </div>
+  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-[96rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
           <th class="px-4 py-3">Faculty ID</th>
@@ -162,12 +509,16 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
           <th class="px-4 py-3">Office</th>
           <th class="px-4 py-3">Rank</th>
           <th class="px-4 py-3">Faculty type</th>
+          <th class="px-4 py-3">Email</th>
+          <th class="px-4 py-3">Phone</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-200">
         <?php foreach ($faculty_rows as $r): ?>
           <tr class="hover:bg-slate-50/80">
-            <td class="px-4 py-3 font-mono font-semibold text-indigo-700"><?= (int)$r['faculty_id'] ?></td>
+            <td class="px-4 py-3">
+              <a class="<?= htmlspecialchars($schedule_id_link_faculty, ENT_QUOTES, 'UTF-8') ?>" href="<?= htmlspecialchars($schedule_href_faculty_person((int)$r['faculty_id'])) ?>"><?= (int)$r['faculty_id'] ?></a>
+            </td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['last_name']) ?></td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['first_name']) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['middle_name'] ?? '')) ?></td>
@@ -175,11 +526,27 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['office_number'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['faculty_rank'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['faculty_type'] ?? '')) ?></td>
+            <td class="px-4 py-3 max-w-[14rem] truncate text-slate-700">
+              <?php $em = trim((string)($r['email'] ?? '')); ?>
+              <?php if ($em !== ''): ?>
+                <a class="text-indigo-700 hover:underline" href="mailto:<?= htmlspecialchars($em, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($em) ?></a>
+              <?php else: ?>
+                <span class="text-slate-400"><?= $fmtContact('') ?></span>
+              <?php endif; ?>
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-slate-700">
+              <?php $ph = trim((string)($r['phone_number'] ?? '')); ?>
+              <?php if ($ph !== ''): ?>
+                <a class="hover:underline" href="tel:<?= htmlspecialchars($telHref($ph), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($ph) ?></a>
+              <?php else: ?>
+                <span class="text-slate-400"><?= $fmtContact('') ?></span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
         <?php if (!$faculty_rows): ?>
           <tr>
-            <td class="px-4 py-6 text-center text-slate-500" colspan="8">
+            <td class="px-4 py-6 text-center text-slate-500" colspan="10">
               <?= $search_q !== '' ? 'No faculty match this search.' : 'No faculty rows in the database yet.' ?>
             </td>
           </tr>
@@ -271,6 +638,12 @@ $schedule_reset_href = str_contains((string)$schedule_form_action, 'admin.php')
 <?php elseif (!empty($schedule_panels['sections'])): ?>
   <h2 class="mt-10 text-lg font-semibold text-slate-900">Course sections <span class="text-sm font-normal text-slate-500">(by term)</span></h2>
   <form class="mt-4 flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
+    <?php if (!empty($schedule_needs_view_hidden)): ?>
+      <input type="hidden" name="view" value="schedule" />
+    <?php endif; ?>
+    <input type="hidden" name="stu_page" value="<?= (int)$stu_page ?>" />
+    <input type="hidden" name="fac_page" value="<?= (int)$fac_page ?>" />
+    <input type="hidden" name="per_page" value="<?= (int)$schedule_per_page ?>" />
     <?php if ($schedule_embed_preservation): ?>
       <input type="hidden" name="sched_filter" value="1" />
       <?php foreach ($schedule_panels as $pk => $on): ?>

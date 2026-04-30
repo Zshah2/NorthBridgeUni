@@ -22,7 +22,7 @@ $docTitle = isset($pageTitle) && is_string($pageTitle) && $pageTitle !== ''
 </head>
 <body class="min-h-full bg-slate-50 font-sans text-slate-900 antialiased">
   <header class="relative border-b border-slate-200 bg-white/80 backdrop-blur">
-    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+    <div class="mx-auto flex max-w-[min(100vw-2rem,96rem)] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
       <div class="flex items-center gap-3">
         <span class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white">NB</span>
         <div>
@@ -43,7 +43,7 @@ $docTitle = isset($pageTitle) && is_string($pageTitle) && $pageTitle !== ''
     </div>
   </header>
 
-  <main class="relative mx-auto max-w-6xl px-4 py-10 sm:px-6">
+  <main class="relative mx-auto max-w-[min(100vw-2rem,96rem)] px-4 py-10 sm:px-6">
     <div class="grid gap-6 lg:grid-cols-12">
       <aside class="lg:col-span-3">
         <?php require view_path('partials/admin_portal_sidebar.php'); ?>

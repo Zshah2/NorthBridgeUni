@@ -16,7 +16,7 @@ $navItem = static function (string $href, string $label, bool $isActive): string
   <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
   <nav class="mt-4 space-y-1 text-sm">
     <?= $navItem(url('/admin.php?view=dashboard'), 'Dashboard', $active === 'dashboard') ?>
-    <?= $navItem(url('/admin.php?view=people'), 'People lookup', $active === 'people') ?>
+    <?= $navItem(url('/admin.php?view=people'), 'ID lookup', $active === 'people') ?>
     <?= $navItem(url('/admin.php?view=schedule'), 'Master schedule', $active === 'schedule') ?>
     <?= $navItem(url('/admin.php?view=enrollment'), 'Directory', $active === 'enrollment') ?>
     <?= $navItem(url('/admin.php?view=registration'), 'Registration', $active === 'registration') ?>

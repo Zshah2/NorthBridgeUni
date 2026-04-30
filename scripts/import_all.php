@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require __DIR__ . '/../app/lib/view.php';
 require __DIR__ . '/../app/lib/db.php';
+require_once __DIR__ . '/../app/lib/northbridge_email.php';
+require_once __DIR__ . '/../app/lib/us_student_phone.php';
 
 function csv_rows(string $path): array
 {
@@ -69,8 +71,8 @@ function import_users(PDO $pdo, string $path): void
 {
     $rows = csv_rows($path);
     $stmt = $pdo->prepare('
-      INSERT INTO users (user_id, first_name, middle_name, last_name, apt_no, street, city, state, zip_code, gender, dob, user_type)
-      VALUES (:user_id, :first_name, :middle_name, :last_name, :apt_no, :street, :city, :state, :zip_code, :gender, :dob, :user_type)
+      INSERT INTO users (user_id, first_name, middle_name, last_name, apt_no, street, city, state, zip_code, email, phone_number, gender, dob, user_type)
+      VALUES (:user_id, :first_name, :middle_name, :last_name, :apt_no, :street, :city, :state, :zip_code, :email, :phone_number, :gender, :dob, :user_type)
       ON DUPLICATE KEY UPDATE
         first_name=VALUES(first_name),
         middle_name=VALUES(middle_name),
@@ -80,6 +82,8 @@ function import_users(PDO $pdo, string $path): void
         city=VALUES(city),
         state=VALUES(state),
         zip_code=VALUES(zip_code),
+        email=VALUES(email),
+        phone_number=VALUES(phone_number),
         gender=VALUES(gender),
         dob=VALUES(dob),
         user_type=VALUES(user_type)
@@ -89,6 +93,33 @@ function import_users(PDO $pdo, string $path): void
         $userId = parse_int($r['user_id'] ?? null);
         if ($userId === null) {
             continue;
+        }
+        $csvEmail = trim((string)($r['email'] ?? ''));
+        if ($csvEmail !== '') {
+            $email = $csvEmail;
+        } else {
+            $ex = $pdo->prepare('SELECT email FROM users WHERE user_id = ? LIMIT 1');
+            $ex->execute([$userId]);
+            $prev = $ex->fetch(PDO::FETCH_ASSOC);
+            $prevEmail = trim((string)($prev['email'] ?? ''));
+            $email = $prevEmail !== ''
+                ? $prevEmail
+                : northbridge_allocate_school_email($pdo, (string)($r['first_name'] ?? ''), (string)($r['last_name'] ?? ''), $userId);
+        }
+        $csvPhone = trim((string)($r['phone_number'] ?? ''));
+        if ($csvPhone !== '') {
+            $phoneNumber = $csvPhone;
+        } else {
+            $phEx = $pdo->prepare('SELECT phone_number FROM users WHERE user_id = ? LIMIT 1');
+            $phEx->execute([$userId]);
+            $phPrev = $phEx->fetch(PDO::FETCH_ASSOC);
+            $prevPhone = trim((string)($phPrev['phone_number'] ?? ''));
+            $isStudentRow = strcasecmp((string)($r['user_type'] ?? ''), 'Student') === 0;
+            if ($isStudentRow && $prevPhone === '') {
+                $phoneNumber = northbridge_allocate_us_student_phone($pdo, $userId);
+            } else {
+                $phoneNumber = $prevPhone !== '' ? $prevPhone : null;
+            }
         }
         $stmt->execute([
             ':user_id' => $userId,
@@ -100,6 +131,8 @@ function import_users(PDO $pdo, string $path): void
             ':city' => ($r['city'] ?? '') !== '' ? $r['city'] : null,
             ':state' => ($r['state'] ?? '') !== '' ? $r['state'] : null,
             ':zip_code' => ($r['zip_code'] ?? '') !== '' ? $r['zip_code'] : null,
+            ':email' => $email,
+            ':phone_number' => $phoneNumber,
             ':gender' => ($r['gender'] ?? '') !== '' ? $r['gender'] : null,
             ':dob' => parse_date($r['dob'] ?? null),
             ':user_type' => $r['user_type'] ?? 'Unknown',
@@ -123,22 +156,54 @@ function import_faculty(PDO $pdo, string $path): void
 {
     $rows = csv_rows($path);
     $stmt = $pdo->prepare('
-      INSERT INTO faculty (faculty_id, office_number, rank, faculty_type)
-      VALUES (:faculty_id, :office_number, :rank, :faculty_type)
+      INSERT INTO faculty (faculty_id, office_number, rank, faculty_type, email, phone_number)
+      VALUES (:faculty_id, :office_number, :rank, :faculty_type, :email, :phone_number)
       ON DUPLICATE KEY UPDATE
         office_number=VALUES(office_number),
         rank=VALUES(rank),
-        faculty_type=VALUES(faculty_type)
+        faculty_type=VALUES(faculty_type),
+        email=VALUES(email),
+        phone_number=VALUES(phone_number)
     ');
     foreach ($rows as $r) {
         $id = parse_int($r['faculty_id'] ?? null);
-        if ($id === null) continue;
+        if ($id === null) {
+            continue;
+        }
+        $csvEmail = trim((string)($r['email'] ?? ''));
+        if ($csvEmail !== '') {
+            $email = $csvEmail;
+        } else {
+            $ex = $pdo->prepare('SELECT email FROM faculty WHERE faculty_id = ? LIMIT 1');
+            $ex->execute([$id]);
+            $prev = $ex->fetch(PDO::FETCH_ASSOC);
+            $prevEmail = trim((string)($prev['email'] ?? ''));
+            if ($prevEmail !== '') {
+                $email = $prevEmail;
+            } else {
+                $uSt = $pdo->prepare('SELECT first_name, last_name FROM users WHERE user_id = ? LIMIT 1');
+                $uSt->execute([$id]);
+                $urow = $uSt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $email = northbridge_allocate_school_email(
+                    $pdo,
+                    (string)($urow['first_name'] ?? ''),
+                    (string)($urow['last_name'] ?? ''),
+                    $id
+                );
+            }
+        }
         $stmt->execute([
             ':faculty_id' => $id,
             ':office_number' => ($r['office_number'] ?? '') !== '' ? $r['office_number'] : null,
             ':rank' => ($r['rank'] ?? '') !== '' ? $r['rank'] : null,
             ':faculty_type' => ($r['faculty_type'] ?? '') !== '' ? $r['faculty_type'] : null,
+            ':email' => $email,
+            ':phone_number' => ($r['phone_number'] ?? '') !== '' ? $r['phone_number'] : null,
         ]);
+        if (trim((string)($r['email'] ?? '')) === '' && $email !== '') {
+            $pdo->prepare('UPDATE users SET email = ? WHERE user_id = ? AND (email IS NULL OR TRIM(email) = "")')
+                ->execute([$email, $id]);
+        }
     }
     fwrite(STDOUT, "Imported faculty\n");
 }

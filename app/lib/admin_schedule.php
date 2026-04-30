@@ -46,7 +46,15 @@ function admin_schedule_panel_flags_from_list(array $pickedKeys): array
  *   term_id: int|null,
  *   dept_id: string,
  *   sections: list<array<string, mixed>>,
- *   schedule_embed_preservation: bool
+ *   schedule_embed_preservation: bool,
+ *   student_total: int,
+ *   faculty_total: int,
+ *   stu_page: int,
+ *   fac_page: int,
+ *   schedule_per_page: int,
+ *   schedule_unified_roster: bool,
+ *   roster_rows: list<array<string, mixed>>,
+ *   roster_total: int
  * }
  */
 function admin_schedule_state(PDO $pdo, array $get): array
@@ -92,52 +100,176 @@ function admin_schedule_state(PDO $pdo, array $get): array
     $secQ = trim((string)($get['sec_q'] ?? ''));
     $studentRows = [];
     $facultyRows = [];
+    $studentTotal = 0;
+    $facultyTotal = 0;
+    $rosterRows = [];
+    $rosterTotal = 0;
+    $unifiedRoster = ($panelFlags['students'] ?? false) && ($panelFlags['faculty'] ?? false);
+
+    $perPage = (int)($get['per_page'] ?? 50);
+    if (!in_array($perPage, [25, 50, 100, 200], true)) {
+        $perPage = 50;
+    }
+    $stuPage = max(1, (int)($get['stu_page'] ?? 1));
+    $facPage = max(1, (int)($get['fac_page'] ?? 1));
 
     try {
-        if ($panelFlags['students'] ?? false) {
-            $stuSql = '
-              SELECT u.user_id, u.first_name, u.middle_name, u.last_name, u.user_type, u.city, u.state
-              FROM users u
-              INNER JOIN students s ON s.student_id = u.user_id
-            ';
+        if ($unifiedRoster) {
+            $stuFrom = ' FROM users u INNER JOIN students s ON s.student_id = u.user_id';
+            $stuWhereSql = '';
             $stuParams = [];
             if ($searchQ !== '') {
-                $stuSql .= ' WHERE (
+                $stuWhereSql = ' WHERE (
                   CAST(u.user_id AS CHAR) LIKE ?
                   OR LOWER(u.first_name) LIKE ?
                   OR LOWER(u.last_name) LIKE ?
                   OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+                  OR LOWER(COALESCE(u.email, "")) LIKE ?
+                  OR COALESCE(u.phone_number, "") LIKE ?
                 )';
                 $likeId = '%' . $searchQ . '%';
                 $likeName = '%' . strtolower($searchQ) . '%';
-                $stuParams = [$likeId, $likeName, $likeName, $likeName];
+                $phoneLike = '%' . $searchQ . '%';
+                $stuParams = [$likeId, $likeName, $likeName, $likeName, $likeName, $phoneLike];
             }
-            $stuSql .= ' ORDER BY u.last_name, u.first_name, u.user_id';
+            $facFrom = ' FROM users u INNER JOIN faculty f ON f.faculty_id = u.user_id';
+            $facWhereSql = '';
+            $facParams = [];
+            if ($searchQ !== '') {
+                $facWhereSql = ' WHERE (
+                  CAST(u.user_id AS CHAR) LIKE ?
+                  OR LOWER(u.first_name) LIKE ?
+                  OR LOWER(u.last_name) LIKE ?
+                  OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+                  OR LOWER(COALESCE(f.email, "")) LIKE ?
+                  OR COALESCE(f.phone_number, "") LIKE ?
+                )';
+                $likeId = '%' . $searchQ . '%';
+                $likeName = '%' . strtolower($searchQ) . '%';
+                $phoneLike = '%' . $searchQ . '%';
+                $facParams = [$likeId, $likeName, $likeName, $likeName, $likeName, $phoneLike];
+            }
+            $cntSt = $pdo->prepare('SELECT COUNT(*)' . $stuFrom . $stuWhereSql);
+            $cntSt->execute($stuParams);
+            $studentTotal = (int)$cntSt->fetchColumn();
+            $cntFac = $pdo->prepare('SELECT COUNT(*)' . $facFrom . $facWhereSql);
+            $cntFac->execute($facParams);
+            $facultyTotal = (int)$cntFac->fetchColumn();
+            $rosterTotal = $studentTotal + $facultyTotal;
+            $rosterMaxPage = $rosterTotal > 0 ? (int)ceil($rosterTotal / $perPage) : 1;
+            $stuPage = min(max(1, $stuPage), max(1, $rosterMaxPage));
+            $facPage = 1;
+            $stuOffset = ($stuPage - 1) * $perPage;
+            $lim = max(1, min(200, $perPage));
+            $off = max(0, $stuOffset);
+
+            $unionSql = '
+              SELECT * FROM (
+                SELECT
+                  \'Student\' AS roster_kind,
+                  u.user_id,
+                  u.first_name,
+                  u.middle_name,
+                  u.last_name,
+                  u.user_type,
+                  u.city,
+                  u.state,
+                  u.email,
+                  u.phone_number,
+                  CAST(NULL AS CHAR(50)) AS office_number,
+                  CAST(NULL AS CHAR(50)) AS faculty_rank,
+                  CAST(NULL AS CHAR(50)) AS faculty_type
+                FROM users u INNER JOIN students s ON s.student_id = u.user_id
+                ' . $stuWhereSql . '
+                UNION ALL
+                SELECT
+                  \'Faculty\' AS roster_kind,
+                  u.user_id,
+                  u.first_name,
+                  u.middle_name,
+                  u.last_name,
+                  u.user_type,
+                  u.city,
+                  u.state,
+                  f.email,
+                  f.phone_number,
+                  f.office_number,
+                  f.`rank` AS faculty_rank,
+                  f.faculty_type
+                FROM users u INNER JOIN faculty f ON f.faculty_id = u.user_id
+                ' . $facWhereSql . '
+              ) combined
+              ORDER BY last_name, first_name, roster_kind, user_id
+              LIMIT ' . $lim . ' OFFSET ' . $off;
+            $uSt = $pdo->prepare($unionSql);
+            $uSt->execute(array_merge($stuParams, $facParams));
+            $rosterRows = $uSt->fetchAll(PDO::FETCH_ASSOC);
+        } elseif ($panelFlags['students'] ?? false) {
+            $stuFrom = ' FROM users u INNER JOIN students s ON s.student_id = u.user_id';
+            $stuWhereSql = '';
+            $stuParams = [];
+            if ($searchQ !== '') {
+                $stuWhereSql = ' WHERE (
+                  CAST(u.user_id AS CHAR) LIKE ?
+                  OR LOWER(u.first_name) LIKE ?
+                  OR LOWER(u.last_name) LIKE ?
+                  OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+                  OR LOWER(COALESCE(u.email, "")) LIKE ?
+                  OR COALESCE(u.phone_number, "") LIKE ?
+                )';
+                $likeId = '%' . $searchQ . '%';
+                $likeName = '%' . strtolower($searchQ) . '%';
+                $phoneLike = '%' . $searchQ . '%';
+                $stuParams = [$likeId, $likeName, $likeName, $likeName, $likeName, $phoneLike];
+            }
+            $cntSt = $pdo->prepare('SELECT COUNT(*)' . $stuFrom . $stuWhereSql);
+            $cntSt->execute($stuParams);
+            $studentTotal = (int)$cntSt->fetchColumn();
+            $maxStuPage = $studentTotal > 0 ? (int)ceil($studentTotal / $perPage) : 1;
+            $stuPage = min(max(1, $stuPage), max(1, $maxStuPage));
+            $stuOffset = ($stuPage - 1) * $perPage;
+
+            $lim = max(1, min(200, $perPage));
+            $off = max(0, $stuOffset);
+            $stuSql = '
+              SELECT u.user_id, u.first_name, u.middle_name, u.last_name, u.user_type, u.city, u.state,
+                     u.email, u.phone_number
+            ' . $stuFrom . $stuWhereSql . ' ORDER BY u.last_name, u.first_name, u.user_id LIMIT ' . $lim . ' OFFSET ' . $off;
             $stSt = $pdo->prepare($stuSql);
             $stSt->execute($stuParams);
             $studentRows = $stSt->fetchAll(PDO::FETCH_ASSOC);
-        }
-
-        if ($panelFlags['faculty'] ?? false) {
-            $facSql = '
-              SELECT u.user_id AS faculty_id, u.first_name, u.middle_name, u.last_name, u.user_type,
-                     f.office_number, f.`rank` AS faculty_rank, f.faculty_type
-              FROM users u
-              INNER JOIN faculty f ON f.faculty_id = u.user_id
-            ';
+        } elseif ($panelFlags['faculty'] ?? false) {
+            $facFrom = ' FROM users u INNER JOIN faculty f ON f.faculty_id = u.user_id';
+            $facWhereSql = '';
             $facParams = [];
             if ($searchQ !== '') {
-                $facSql .= ' WHERE (
+                $facWhereSql = ' WHERE (
                   CAST(u.user_id AS CHAR) LIKE ?
                   OR LOWER(u.first_name) LIKE ?
                   OR LOWER(u.last_name) LIKE ?
                   OR LOWER(CONCAT(COALESCE(u.first_name, ""), " ", COALESCE(u.last_name, ""))) LIKE ?
+                  OR LOWER(COALESCE(f.email, "")) LIKE ?
+                  OR COALESCE(f.phone_number, "") LIKE ?
                 )';
                 $likeId = '%' . $searchQ . '%';
                 $likeName = '%' . strtolower($searchQ) . '%';
-                $facParams = [$likeId, $likeName, $likeName, $likeName];
+                $phoneLike = '%' . $searchQ . '%';
+                $facParams = [$likeId, $likeName, $likeName, $likeName, $likeName, $phoneLike];
             }
-            $facSql .= ' ORDER BY u.last_name, u.first_name, u.user_id';
+            $cntFac = $pdo->prepare('SELECT COUNT(*)' . $facFrom . $facWhereSql);
+            $cntFac->execute($facParams);
+            $facultyTotal = (int)$cntFac->fetchColumn();
+            $maxFacPage = $facultyTotal > 0 ? (int)ceil($facultyTotal / $perPage) : 1;
+            $facPage = min(max(1, $facPage), max(1, $maxFacPage));
+            $facOffset = ($facPage - 1) * $perPage;
+
+            $flim = max(1, min(200, $perPage));
+            $foff = max(0, $facOffset);
+            $facSql = '
+              SELECT u.user_id AS faculty_id, u.first_name, u.middle_name, u.last_name, u.user_type,
+                     f.office_number, f.`rank` AS faculty_rank, f.faculty_type,
+                     f.email, f.phone_number
+            ' . $facFrom . $facWhereSql . ' ORDER BY u.last_name, u.first_name, u.user_id LIMIT ' . $flim . ' OFFSET ' . $foff;
             $facSt = $pdo->prepare($facSql);
             $facSt->execute($facParams);
             $facultyRows = $facSt->fetchAll(PDO::FETCH_ASSOC);
@@ -278,7 +410,10 @@ function admin_schedule_state(PDO $pdo, array $get): array
         || $courseQ !== ''
         || $catalogDept !== ''
         || $secQ !== ''
-        || $deptFilter !== '';
+        || $deptFilter !== ''
+        || $perPage !== 50
+        || $stuPage > 1
+        || $facPage > 1;
 
     return [
         'schedule_panels' => $panelFlags,
@@ -290,6 +425,14 @@ function admin_schedule_state(PDO $pdo, array $get): array
         'valid_dept_ids_for_select' => $validDeptIds,
         'student_rows' => $studentRows,
         'faculty_rows' => $facultyRows,
+        'student_total' => $studentTotal,
+        'faculty_total' => $facultyTotal,
+        'schedule_unified_roster' => $unifiedRoster,
+        'roster_rows' => $rosterRows,
+        'roster_total' => $rosterTotal,
+        'stu_page' => $stuPage,
+        'fac_page' => $facPage,
+        'schedule_per_page' => $perPage,
         'dept_rows' => $deptRows,
         'course_rows' => $courseRows,
         'terms' => $terms,
