@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 /**
- * School email pattern: first letter of first name + sanitized last name @northbridge.edu
- * (same for students and faculty). When that local part is taken (e.g. same initial + last name),
- * append 2, 3, 4, … until unique across users.email and faculty.email.
+ * School email pattern: sanitized last name + first initial @northbridge.edu
+ * (same for students and faculty). When that local part is taken (e.g. same last name + initial),
+ * append a single digit (1–9) until unique across users.email and faculty.email.
  */
 function northbridge_email_domain(): string
 {
@@ -46,7 +46,7 @@ function northbridge_email_local_base(string $firstName, string $lastName): stri
         }
     }
 
-    return $letter . northbridge_email_sanitize_last($lastName);
+    return northbridge_email_sanitize_last($lastName) . $letter;
 }
 
 function northbridge_email_full(string $localPart): string
@@ -90,13 +90,14 @@ function northbridge_allocate_school_email(PDO $pdo, string $firstName, string $
     if (!northbridge_school_email_in_use($pdo, $full, $userId)) {
         return $full;
     }
-    for ($n = 2; $n <= 9999; $n++) {
-        $local = $base . (string) $n;
+    for ($n = 1; $n <= 9; $n++) {
+        $local = $base . (string)$n;
         $full = northbridge_email_full($local);
         if (!northbridge_school_email_in_use($pdo, $full, $userId)) {
             return $full;
         }
     }
 
-    return northbridge_email_full($base . 'x' . (string) $userId);
+    // Extremely unlikely in this project dataset; keep a stable output without leaking full IDs.
+    return northbridge_email_full($base . '9');
 }

@@ -64,7 +64,10 @@ function admin_schedule_state(PDO $pdo, array $get): array
     $filtersSubmitted = isset($get['sched_filter']) && (string)$get['sched_filter'] === '1';
 
     if (!$filtersSubmitted) {
-        $panelFlags = array_fill_keys($keysOrder, true);
+        // Master schedule is primarily a people directory. Default to people-only panels.
+        $panelFlags = array_fill_keys($keysOrder, false);
+        $panelFlags['students'] = true;
+        $panelFlags['faculty'] = true;
     } elseif (is_array($panelsGet)) {
         $picked = [];
         foreach ($keysOrder as $k) {
@@ -115,7 +118,25 @@ function admin_schedule_state(PDO $pdo, array $get): array
 
     try {
         if ($unifiedRoster) {
-            $stuFrom = ' FROM users u INNER JOIN students s ON s.student_id = u.user_id';
+            $stuFrom = ' FROM users u
+              INNER JOIN students s ON s.student_id = u.user_id
+              LEFT JOIN (
+                SELECT
+                  sd.student_id,
+                  GROUP_CONCAT(
+                    CONCAT(
+                      sd.dept_id,
+                      CASE
+                        WHEN COALESCE(sd.declaration_role, "") = "" THEN ""
+                        ELSE CONCAT(" (", sd.declaration_role, ")")
+                      END
+                    )
+                    ORDER BY sd.dept_id
+                    SEPARATOR ", "
+                  ) AS dept_roles
+                FROM student_departments sd
+                GROUP BY sd.student_id
+              ) sdagg ON sdagg.student_id = u.user_id';
             $stuWhereSql = '';
             $stuParams = [];
             if ($searchQ !== '') {
@@ -132,7 +153,20 @@ function admin_schedule_state(PDO $pdo, array $get): array
                 $phoneLike = '%' . $searchQ . '%';
                 $stuParams = [$likeId, $likeName, $likeName, $likeName, $likeName, $phoneLike];
             }
-            $facFrom = ' FROM users u INNER JOIN faculty f ON f.faculty_id = u.user_id';
+            $facFrom = ' FROM users u
+              INNER JOIN faculty f ON f.faculty_id = u.user_id
+              LEFT JOIN (
+                SELECT
+                  fd.faculty_id,
+                  GROUP_CONCAT(
+                    CONCAT(fd.dept_id, CASE WHEN d.dept_name IS NULL THEN "" ELSE CONCAT(" — ", d.dept_name) END)
+                    ORDER BY fd.dept_id
+                    SEPARATOR ", "
+                  ) AS dept_names
+                FROM faculty_departments fd
+                LEFT JOIN departments d ON d.dept_id = fd.dept_id
+                GROUP BY fd.faculty_id
+              ) fdagg ON fdagg.faculty_id = u.user_id';
             $facWhereSql = '';
             $facParams = [];
             if ($searchQ !== '') {
@@ -172,14 +206,18 @@ function admin_schedule_state(PDO $pdo, array $get): array
                   u.middle_name,
                   u.last_name,
                   u.user_type,
+                  (CAST(u.apt_no AS CHAR(40)) COLLATE utf8mb4_0900_ai_ci) AS apt_no,
+                  (CAST(u.street AS CHAR(255)) COLLATE utf8mb4_0900_ai_ci) AS street,
                   u.city,
                   u.state,
-                  u.email,
-                  u.phone_number,
-                  CAST(NULL AS CHAR(50)) AS office_number,
-                  CAST(NULL AS CHAR(50)) AS faculty_rank,
-                  CAST(NULL AS CHAR(50)) AS faculty_type
-                FROM users u INNER JOIN students s ON s.student_id = u.user_id
+                  (CAST(u.zip_code AS CHAR(20)) COLLATE utf8mb4_0900_ai_ci) AS zip_code,
+                  (CAST(u.email AS CHAR(255)) COLLATE utf8mb4_0900_ai_ci) AS email,
+                  (CAST(u.phone_number AS CHAR(64)) COLLATE utf8mb4_0900_ai_ci) AS phone_number,
+                  (CAST(sdagg.dept_roles AS CHAR(255)) COLLATE utf8mb4_0900_ai_ci) AS dept_list,
+                  (CAST(NULL AS CHAR(50)) COLLATE utf8mb4_0900_ai_ci) AS office_number,
+                  (CAST(NULL AS CHAR(50)) COLLATE utf8mb4_0900_ai_ci) AS faculty_rank,
+                  (CAST(NULL AS CHAR(50)) COLLATE utf8mb4_0900_ai_ci) AS faculty_type
+                ' . $stuFrom . '
                 ' . $stuWhereSql . '
                 UNION ALL
                 SELECT
@@ -189,14 +227,18 @@ function admin_schedule_state(PDO $pdo, array $get): array
                   u.middle_name,
                   u.last_name,
                   u.user_type,
+                  (CAST(u.apt_no AS CHAR(40)) COLLATE utf8mb4_0900_ai_ci) AS apt_no,
+                  (CAST(u.street AS CHAR(255)) COLLATE utf8mb4_0900_ai_ci) AS street,
                   u.city,
                   u.state,
-                  f.email,
-                  f.phone_number,
-                  f.office_number,
-                  f.`rank` AS faculty_rank,
-                  f.faculty_type
-                FROM users u INNER JOIN faculty f ON f.faculty_id = u.user_id
+                  (CAST(u.zip_code AS CHAR(20)) COLLATE utf8mb4_0900_ai_ci) AS zip_code,
+                  (CAST(f.email AS CHAR(255)) COLLATE utf8mb4_0900_ai_ci) AS email,
+                  (CAST(f.phone_number AS CHAR(64)) COLLATE utf8mb4_0900_ai_ci) AS phone_number,
+                  (CAST(fdagg.dept_names AS CHAR(255)) COLLATE utf8mb4_0900_ai_ci) AS dept_list,
+                  (CAST(f.office_number AS CHAR(50)) COLLATE utf8mb4_0900_ai_ci) AS office_number,
+                  (CAST(f.`rank` AS CHAR(50)) COLLATE utf8mb4_0900_ai_ci) AS faculty_rank,
+                  (CAST(f.faculty_type AS CHAR(50)) COLLATE utf8mb4_0900_ai_ci) AS faculty_type
+                ' . $facFrom . '
                 ' . $facWhereSql . '
               ) combined
               ORDER BY last_name, first_name, roster_kind, user_id
@@ -205,7 +247,25 @@ function admin_schedule_state(PDO $pdo, array $get): array
             $uSt->execute(array_merge($stuParams, $facParams));
             $rosterRows = $uSt->fetchAll(PDO::FETCH_ASSOC);
         } elseif ($panelFlags['students'] ?? false) {
-            $stuFrom = ' FROM users u INNER JOIN students s ON s.student_id = u.user_id';
+            $stuFrom = ' FROM users u
+              INNER JOIN students s ON s.student_id = u.user_id
+              LEFT JOIN (
+                SELECT
+                  sd.student_id,
+                  GROUP_CONCAT(
+                    CONCAT(
+                      sd.dept_id,
+                      CASE
+                        WHEN COALESCE(sd.declaration_role, "") = "" THEN ""
+                        ELSE CONCAT(" (", sd.declaration_role, ")")
+                      END
+                    )
+                    ORDER BY sd.dept_id
+                    SEPARATOR ", "
+                  ) AS dept_roles
+                FROM student_departments sd
+                GROUP BY sd.student_id
+              ) sdagg ON sdagg.student_id = u.user_id';
             $stuWhereSql = '';
             $stuParams = [];
             if ($searchQ !== '') {
@@ -232,14 +292,30 @@ function admin_schedule_state(PDO $pdo, array $get): array
             $lim = max(1, min(200, $perPage));
             $off = max(0, $stuOffset);
             $stuSql = '
-              SELECT u.user_id, u.first_name, u.middle_name, u.last_name, u.user_type, u.city, u.state,
-                     u.email, u.phone_number
+              SELECT
+                u.user_id, u.first_name, u.middle_name, u.last_name, u.user_type,
+                u.apt_no, u.street, u.city, u.state, u.zip_code,
+                u.email, u.phone_number,
+                sdagg.dept_roles AS dept_list
             ' . $stuFrom . $stuWhereSql . ' ORDER BY u.last_name, u.first_name, u.user_id LIMIT ' . $lim . ' OFFSET ' . $off;
             $stSt = $pdo->prepare($stuSql);
             $stSt->execute($stuParams);
             $studentRows = $stSt->fetchAll(PDO::FETCH_ASSOC);
         } elseif ($panelFlags['faculty'] ?? false) {
-            $facFrom = ' FROM users u INNER JOIN faculty f ON f.faculty_id = u.user_id';
+            $facFrom = ' FROM users u
+              INNER JOIN faculty f ON f.faculty_id = u.user_id
+              LEFT JOIN (
+                SELECT
+                  fd.faculty_id,
+                  GROUP_CONCAT(
+                    CONCAT(fd.dept_id, CASE WHEN d.dept_name IS NULL THEN "" ELSE CONCAT(" — ", d.dept_name) END)
+                    ORDER BY fd.dept_id
+                    SEPARATOR ", "
+                  ) AS dept_names
+                FROM faculty_departments fd
+                LEFT JOIN departments d ON d.dept_id = fd.dept_id
+                GROUP BY fd.faculty_id
+              ) fdagg ON fdagg.faculty_id = u.user_id';
             $facWhereSql = '';
             $facParams = [];
             if ($searchQ !== '') {
@@ -267,8 +343,10 @@ function admin_schedule_state(PDO $pdo, array $get): array
             $foff = max(0, $facOffset);
             $facSql = '
               SELECT u.user_id AS faculty_id, u.first_name, u.middle_name, u.last_name, u.user_type,
+                     u.apt_no, u.street, u.city, u.state, u.zip_code,
                      f.office_number, f.`rank` AS faculty_rank, f.faculty_type,
-                     f.email, f.phone_number
+                     f.email, f.phone_number,
+                     fdagg.dept_names AS dept_list
             ' . $facFrom . $facWhereSql . ' ORDER BY u.last_name, u.first_name, u.user_id LIMIT ' . $flim . ' OFFSET ' . $foff;
             $facSt = $pdo->prepare($facSql);
             $facSt->execute($facParams);

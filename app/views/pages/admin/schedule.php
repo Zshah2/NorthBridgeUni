@@ -164,7 +164,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
 
 <h1 class="text-2xl font-semibold text-slate-900">Master schedule</h1>
 <p class="mt-2 text-sm text-slate-600">
-  Filter students and faculty by ID, name, email, or phone; narrow departments and courses; choose which tables to show; refine sections by term, department, and text (course, instructor, room, time).
+  A full directory of <strong class="font-semibold text-slate-800">students and faculty</strong>. Search by ID, name, email, or phone. Row IDs link to the person’s record.
 </p>
 
 <details class="group mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 shadow-sm open:ring-1 open:ring-indigo-100">
@@ -183,38 +183,25 @@ $schedulePaginationPages = static function (int $current, int $last): array {
   </div>
 </details>
 
-<form class="mt-6 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
+<div id="schedule-filters-wrap" class="mt-6 space-y-3">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="text-sm font-semibold text-slate-900">Filters</div>
+    <div class="flex items-center gap-2">
+      <button id="schedule-filters-hide" type="button" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Hide filters</button>
+      <a href="<?= htmlspecialchars($schedule_reset_href) ?>" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Reset</a>
+    </div>
+  </div>
+
+  <form id="schedule-filters-form" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
   <?php if (!empty($schedule_needs_view_hidden)): ?>
     <input type="hidden" name="view" value="schedule" />
   <?php endif; ?>
   <input type="hidden" name="sched_filter" value="1" />
-  <?php if (($term_id ?? null) !== null): ?>
-    <input type="hidden" name="term_id" value="<?= (int)$term_id ?>" />
-  <?php endif; ?>
-  <?php if (($dept_id ?? '') !== ''): ?>
-    <input type="hidden" name="dept_id" value="<?= htmlspecialchars((string)$dept_id, ENT_QUOTES, 'UTF-8') ?>" />
-  <?php endif; ?>
-  <?php if (($sec_q ?? '') !== ''): ?>
-    <input type="hidden" name="sec_q" value="<?= htmlspecialchars((string)$sec_q, ENT_QUOTES, 'UTF-8') ?>" />
-  <?php endif; ?>
+  <input type="hidden" name="panels[students]" value="1" />
+  <input type="hidden" name="panels[faculty]" value="1" />
 
-  <div class="flex flex-wrap gap-x-8 gap-y-3 text-sm text-slate-700">
-    <?php foreach (['students' => 'Students', 'faculty' => 'Faculty', 'terms' => 'Terms', 'departments' => 'Departments', 'courses' => 'Courses', 'sections' => 'Sections'] as $pk => $pl): ?>
-      <label class="flex cursor-pointer items-center gap-2">
-        <input
-          type="checkbox"
-          name="panels[<?= htmlspecialchars($pk) ?>]"
-          value="1"
-          class="rounded border-slate-300 text-indigo-600"
-          <?= !empty($schedule_panels[$pk]) ? ' checked' : '' ?>
-        />
-        <?= htmlspecialchars($pl) ?>
-      </label>
-    <?php endforeach; ?>
-  </div>
-
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="min-w-0 lg:col-span-2">
+  <div class="grid gap-4 sm:grid-cols-2">
+    <div class="min-w-0">
       <label class="block text-xs font-semibold uppercase text-slate-500" for="schedule-q">People search (students &amp; faculty)</label>
       <input
         type="search"
@@ -226,39 +213,21 @@ $schedulePaginationPages = static function (int $current, int $last): array {
         autocomplete="off"
       />
     </div>
-    <div>
-      <label class="block text-xs font-semibold uppercase text-slate-500" for="catalog_dept">Catalog department</label>
-      <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm" id="catalog_dept" name="catalog_dept">
-        <option value="">All</option>
-        <?php foreach ($valid_dept_ids_for_select as $did): ?>
-          <option value="<?= htmlspecialchars((string)$did) ?>" <?= (string)$did === $catalog_dept ? ' selected' : '' ?>><?= htmlspecialchars((string)$did) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div>
-      <label class="block text-xs font-semibold uppercase text-slate-500" for="course_q">Course catalog search</label>
-      <input
-        class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
-        id="course_q"
-        name="course_q"
-        value="<?= htmlspecialchars($course_q) ?>"
-        placeholder="ID or title"
-      />
+    <div class="flex items-end gap-4">
+      <div>
+        <label class="block text-xs font-semibold uppercase text-slate-500" for="schedule-per-page">Rows per page</label>
+        <select id="schedule-per-page" name="per_page" class="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
+          <?php foreach ([25, 50, 100, 200] as $pp): ?>
+            <option value="<?= (int)$pp ?>"<?= $schedule_per_page === $pp ? ' selected' : '' ?>><?= (int)$pp ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="pb-0.5 text-xs text-slate-500">Applies to the roster list.</div>
     </div>
   </div>
 
-  <div class="flex flex-wrap items-end gap-4 border-t border-slate-100 pt-4">
-    <input type="hidden" name="stu_page" value="1" />
-    <input type="hidden" name="fac_page" value="1" />
-    <div>
-      <label class="block text-xs font-semibold uppercase text-slate-500" for="schedule-per-page">Rows per page (students &amp; faculty)</label>
-      <select id="schedule-per-page" name="per_page" class="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-        <?php foreach ([25, 50, 100, 200] as $pp): ?>
-          <option value="<?= (int)$pp ?>"<?= $schedule_per_page === $pp ? ' selected' : '' ?>><?= (int)$pp ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-  </div>
+  <input type="hidden" name="stu_page" value="1" />
+  <input type="hidden" name="fac_page" value="1" />
 
   <div class="flex flex-wrap items-center gap-3">
     <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Apply filters</button>
@@ -267,6 +236,48 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     <a href="<?= htmlspecialchars($schedule_href_add_person) ?>" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100">Add person</a>
   </div>
 </form>
+
+  <button id="schedule-filters-fab" type="button" class="fixed bottom-5 right-5 z-40 hidden rounded-full bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+    Filters
+  </button>
+</div>
+
+<script>
+(function () {
+  var wrap = document.getElementById('schedule-filters-wrap');
+  var form = document.getElementById('schedule-filters-form');
+  var hideBtn = document.getElementById('schedule-filters-hide');
+  var fab = document.getElementById('schedule-filters-fab');
+  var focusInput = document.getElementById('schedule-q');
+  if (!wrap || !form || !hideBtn || !fab) return;
+
+  function setHidden(on) {
+    form.classList.toggle('hidden', on);
+    fab.classList.toggle('hidden', !on);
+    hideBtn.textContent = on ? 'Show filters' : 'Hide filters';
+    try { localStorage.setItem('schedule_filters_hidden', on ? '1' : '0'); } catch (e) {}
+  }
+
+  hideBtn.addEventListener('click', function () {
+    var nowHidden = !form.classList.contains('hidden');
+    setHidden(nowHidden);
+    if (!nowHidden && focusInput) {
+      focusInput.focus();
+    }
+  });
+
+  fab.addEventListener('click', function () {
+    setHidden(false);
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(function () { if (focusInput) focusInput.focus(); }, 250);
+  });
+
+  try {
+    var saved = localStorage.getItem('schedule_filters_hidden');
+    if (saved === '1') setHidden(true);
+  } catch (e) {}
+})();
+</script>
 
 <?php if ($schedule_unified_roster): ?>
   <?php
@@ -307,13 +318,15 @@ $schedulePaginationPages = static function (int $current, int $last): array {
   </div>
 
   <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-[64rem] w-full text-left text-sm">
+    <table class="min-w-[96rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
           <th class="px-4 py-3">Role</th>
           <th class="px-4 py-3">ID</th>
           <th class="px-4 py-3">Last name</th>
           <th class="px-4 py-3">First name</th>
+          <th class="px-4 py-3">Departments</th>
+          <th class="px-4 py-3">Address</th>
           <th class="px-4 py-3">Email</th>
           <th class="px-4 py-3">Phone</th>
           <th class="px-4 py-3">Office</th>
@@ -335,6 +348,25 @@ $schedulePaginationPages = static function (int $current, int $last): array {
             </td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)($r['last_name'] ?? '')) ?></td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)($r['first_name'] ?? '')) ?></td>
+            <td class="px-4 py-3 max-w-[24rem] truncate text-slate-700">
+              <?php $dl = trim((string)($r['dept_list'] ?? '')); ?>
+              <?= $dl !== '' ? htmlspecialchars($dl) : '—' ?>
+            </td>
+            <td class="px-4 py-3 max-w-[26rem] truncate text-slate-600">
+              <?php
+                $apt = trim((string)($r['apt_no'] ?? ''));
+                $street = trim((string)($r['street'] ?? ''));
+                $city = trim((string)($r['city'] ?? ''));
+                $state = trim((string)($r['state'] ?? ''));
+                $zip = trim((string)($r['zip_code'] ?? ''));
+                $parts = [];
+                $line1 = trim(($apt !== '' ? ($apt . ' ') : '') . $street);
+                if ($line1 !== '') $parts[] = $line1;
+                $line2 = trim($city . ($state !== '' ? (', ' . $state) : '') . ($zip !== '' ? (' ' . $zip) : ''));
+                if ($line2 !== '') $parts[] = $line2;
+                echo $parts ? htmlspecialchars(implode(' · ', $parts), ENT_QUOTES, 'UTF-8') : '—';
+              ?>
+            </td>
             <td class="px-4 py-3 max-w-[14rem] truncate text-slate-700">
               <?php $em = trim((string)($r['email'] ?? '')); ?>
               <?php if ($em !== ''): ?>
@@ -351,12 +383,19 @@ $schedulePaginationPages = static function (int $current, int $last): array {
                 <span class="text-slate-400"><?= $fmtContact('') ?></span>
               <?php endif; ?>
             </td>
-            <td class="px-4 py-3 text-slate-600"><?= $isFac ? htmlspecialchars((string)($r['office_number'] ?? '')) : '—' ?></td>
+            <td class="px-4 py-3 text-slate-600"><?php
+              if (!$isFac) {
+                  echo '—';
+              } else {
+                  $off = trim((string)($r['office_number'] ?? ''));
+                  echo $off !== '' ? htmlspecialchars($off) : '—';
+              }
+            ?></td>
           </tr>
         <?php endforeach; ?>
         <?php if (!$roster_rows): ?>
           <tr>
-            <td class="px-4 py-6 text-center text-slate-500" colspan="7">
+            <td class="px-4 py-6 text-center text-slate-500" colspan="9">
               <?= $search_q !== '' ? 'No people match this search.' : 'No people rows in the database yet.' ?>
             </td>
           </tr>
@@ -404,7 +443,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     <?php endif; ?>
   </div>
   <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-[88rem] w-full text-left text-sm">
+    <table class="min-w-[110rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
           <th class="px-4 py-3">Student ID</th>
@@ -412,8 +451,8 @@ $schedulePaginationPages = static function (int $current, int $last): array {
           <th class="px-4 py-3">First name</th>
           <th class="px-4 py-3">Middle</th>
           <th class="px-4 py-3">Type</th>
-          <th class="px-4 py-3">City</th>
-          <th class="px-4 py-3">State</th>
+          <th class="px-4 py-3">Majors / minors</th>
+          <th class="px-4 py-3">Address</th>
           <th class="px-4 py-3">Email</th>
           <th class="px-4 py-3">Phone</th>
         </tr>
@@ -428,8 +467,25 @@ $schedulePaginationPages = static function (int $current, int $last): array {
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['first_name']) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['middle_name'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)$r['user_type']) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['city'] ?? '')) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['state'] ?? '')) ?></td>
+            <td class="px-4 py-3 max-w-[26rem] truncate text-slate-700">
+              <?php $dl = trim((string)($r['dept_list'] ?? '')); ?>
+              <?= $dl !== '' ? htmlspecialchars($dl) : '—' ?>
+            </td>
+            <td class="px-4 py-3 max-w-[28rem] truncate text-slate-600">
+              <?php
+                $apt = trim((string)($r['apt_no'] ?? ''));
+                $street = trim((string)($r['street'] ?? ''));
+                $city = trim((string)($r['city'] ?? ''));
+                $state = trim((string)($r['state'] ?? ''));
+                $zip = trim((string)($r['zip_code'] ?? ''));
+                $parts = [];
+                $line1 = trim(($apt !== '' ? ($apt . ' ') : '') . $street);
+                if ($line1 !== '') $parts[] = $line1;
+                $line2 = trim($city . ($state !== '' ? (', ' . $state) : '') . ($zip !== '' ? (' ' . $zip) : ''));
+                if ($line2 !== '') $parts[] = $line2;
+                echo $parts ? htmlspecialchars(implode(' · ', $parts), ENT_QUOTES, 'UTF-8') : '—';
+              ?>
+            </td>
             <td class="px-4 py-3 max-w-[14rem] truncate text-slate-700">
               <?php $em = trim((string)($r['email'] ?? '')); ?>
               <?php if ($em !== ''): ?>
@@ -498,7 +554,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     <?php endif; ?>
   </div>
   <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-[96rem] w-full text-left text-sm">
+    <table class="min-w-[124rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
           <th class="px-4 py-3">Faculty ID</th>
@@ -506,6 +562,8 @@ $schedulePaginationPages = static function (int $current, int $last): array {
           <th class="px-4 py-3">First name</th>
           <th class="px-4 py-3">Middle</th>
           <th class="px-4 py-3">Type</th>
+          <th class="px-4 py-3">Departments</th>
+          <th class="px-4 py-3">Address</th>
           <th class="px-4 py-3">Office</th>
           <th class="px-4 py-3">Rank</th>
           <th class="px-4 py-3">Faculty type</th>
@@ -523,6 +581,25 @@ $schedulePaginationPages = static function (int $current, int $last): array {
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['first_name']) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['middle_name'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)$r['user_type']) ?></td>
+            <td class="px-4 py-3 max-w-[28rem] truncate text-slate-700">
+              <?php $dl = trim((string)($r['dept_list'] ?? '')); ?>
+              <?= $dl !== '' ? htmlspecialchars($dl) : '—' ?>
+            </td>
+            <td class="px-4 py-3 max-w-[30rem] truncate text-slate-600">
+              <?php
+                $apt = trim((string)($r['apt_no'] ?? ''));
+                $street = trim((string)($r['street'] ?? ''));
+                $city = trim((string)($r['city'] ?? ''));
+                $state = trim((string)($r['state'] ?? ''));
+                $zip = trim((string)($r['zip_code'] ?? ''));
+                $parts = [];
+                $line1 = trim(($apt !== '' ? ($apt . ' ') : '') . $street);
+                if ($line1 !== '') $parts[] = $line1;
+                $line2 = trim($city . ($state !== '' ? (', ' . $state) : '') . ($zip !== '' ? (' ' . $zip) : ''));
+                if ($line2 !== '') $parts[] = $line2;
+                echo $parts ? htmlspecialchars(implode(' · ', $parts), ENT_QUOTES, 'UTF-8') : '—';
+              ?>
+            </td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['office_number'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['faculty_rank'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['faculty_type'] ?? '')) ?></td>
@@ -546,7 +623,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
         <?php endforeach; ?>
         <?php if (!$faculty_rows): ?>
           <tr>
-            <td class="px-4 py-6 text-center text-slate-500" colspan="10">
+            <td class="px-4 py-6 text-center text-slate-500" colspan="12">
               <?= $search_q !== '' ? 'No faculty match this search.' : 'No faculty rows in the database yet.' ?>
             </td>
           </tr>
@@ -556,183 +633,4 @@ $schedulePaginationPages = static function (int $current, int $last): array {
   </div>
 <?php endif; ?>
 
-<?php if (!empty($schedule_panels['terms'])): ?>
-  <h2 class="mt-10 text-lg font-semibold text-slate-900">Terms <span class="text-sm font-normal text-slate-500">(<?= count($terms ?? []) ?>)</span></h2>
-  <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-full text-left text-sm">
-      <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-        <tr><th class="px-4 py-3">Term ID</th><th class="px-4 py-3">Code</th><th class="px-4 py-3">Name</th><th class="px-4 py-3">Start</th><th class="px-4 py-3">End</th></tr>
-      </thead>
-      <tbody class="divide-y divide-slate-200">
-        <?php foreach ($terms ?? [] as $tr): ?>
-          <tr class="hover:bg-slate-50/80">
-            <td class="px-4 py-3 font-mono"><?= (int)$tr['term_id'] ?></td>
-            <td class="px-4 py-3 font-semibold text-slate-900"><?= htmlspecialchars((string)$tr['code']) ?></td>
-            <td class="px-4 py-3"><?= htmlspecialchars((string)$tr['name']) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($tr['start_date'] ?? '')) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($tr['end_date'] ?? '')) ?></td>
-          </tr>
-        <?php endforeach; ?>
-        <?php if (!($terms ?? [])): ?>
-          <tr><td class="px-4 py-6 text-center text-slate-500" colspan="5">No terms.</td></tr>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
-<?php endif; ?>
-
-<?php if (!empty($schedule_panels['departments'])): ?>
-  <h2 class="mt-10 text-lg font-semibold text-slate-900">Departments <span class="text-sm font-normal text-slate-500">(<?= count($dept_rows) ?>)</span></h2>
-  <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-full text-left text-sm">
-      <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-        <tr><th class="px-4 py-3">Dept ID</th><th class="px-4 py-3">Name</th><th class="px-4 py-3">Email</th><th class="px-4 py-3">Phone</th><th class="px-4 py-3">Building</th><th class="px-4 py-3">Room</th></tr>
-      </thead>
-      <tbody class="divide-y divide-slate-200">
-        <?php foreach ($dept_rows as $dr): ?>
-          <tr class="hover:bg-slate-50/80">
-            <td class="px-4 py-3 font-mono font-semibold text-indigo-800"><?= htmlspecialchars((string)$dr['dept_id']) ?></td>
-            <td class="px-4 py-3"><?= htmlspecialchars((string)$dr['dept_name']) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($dr['email'] ?? '')) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($dr['phone_number'] ?? '')) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($dr['building_number'] ?? '')) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($dr['room_number'] ?? '')) ?></td>
-          </tr>
-        <?php endforeach; ?>
-        <?php if (!$dept_rows): ?>
-          <tr><td class="px-4 py-6 text-center text-slate-500" colspan="6">No departments match these filters.</td></tr>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
-<?php endif; ?>
-
-<?php if (!empty($schedule_panels['courses'])): ?>
-  <h2 class="mt-10 text-lg font-semibold text-slate-900">Courses <span class="text-sm font-normal text-slate-500">(<?= count($course_rows) ?>)</span></h2>
-  <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <table class="min-w-full text-left text-sm">
-      <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-        <tr><th class="px-4 py-3">Course ID</th><th class="px-4 py-3">Title</th><th class="px-4 py-3">Credits</th><th class="px-4 py-3">Dept</th></tr>
-      </thead>
-      <tbody class="divide-y divide-slate-200">
-        <?php foreach ($course_rows as $cr): ?>
-          <tr class="hover:bg-slate-50/80">
-            <td class="px-4 py-3 font-mono font-semibold text-indigo-800"><?= htmlspecialchars((string)$cr['course_id']) ?></td>
-            <td class="px-4 py-3"><?= htmlspecialchars((string)$cr['course_name']) ?></td>
-            <td class="px-4 py-3"><?= (int)$cr['credits'] ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($cr['dept_id'] ?? '')) ?></td>
-          </tr>
-        <?php endforeach; ?>
-        <?php if (!$course_rows): ?>
-          <tr><td class="px-4 py-6 text-center text-slate-500" colspan="4">No courses match these filters.</td></tr>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
-<?php endif; ?>
-
-<?php if ($terms === []): ?>
-  <div class="mt-10 rounded-2xl border border-slate-200 bg-amber-50 px-5 py-4 text-sm text-amber-950">
-    No terms in the database yet — offerings cannot be listed. Run migration and seed scripts as needed.
-  </div>
-<?php elseif (!empty($schedule_panels['sections'])): ?>
-  <h2 class="mt-10 text-lg font-semibold text-slate-900">Course sections <span class="text-sm font-normal text-slate-500">(by term)</span></h2>
-  <form class="mt-4 flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
-    <?php if (!empty($schedule_needs_view_hidden)): ?>
-      <input type="hidden" name="view" value="schedule" />
-    <?php endif; ?>
-    <input type="hidden" name="stu_page" value="<?= (int)$stu_page ?>" />
-    <input type="hidden" name="fac_page" value="<?= (int)$fac_page ?>" />
-    <input type="hidden" name="per_page" value="<?= (int)$schedule_per_page ?>" />
-    <?php if ($schedule_embed_preservation): ?>
-      <input type="hidden" name="sched_filter" value="1" />
-      <?php foreach ($schedule_panels as $pk => $on): ?>
-        <?php if ($on): ?>
-          <input type="hidden" name="panels[<?= htmlspecialchars((string)$pk) ?>]" value="1" />
-        <?php endif; ?>
-      <?php endforeach; ?>
-      <?php if ($search_q !== ''): ?>
-        <input type="hidden" name="q" value="<?= htmlspecialchars($search_q, ENT_QUOTES, 'UTF-8') ?>" />
-      <?php endif; ?>
-      <?php if ($course_q !== ''): ?>
-        <input type="hidden" name="course_q" value="<?= htmlspecialchars($course_q, ENT_QUOTES, 'UTF-8') ?>" />
-      <?php endif; ?>
-      <?php if ($catalog_dept !== ''): ?>
-        <input type="hidden" name="catalog_dept" value="<?= htmlspecialchars($catalog_dept, ENT_QUOTES, 'UTF-8') ?>" />
-      <?php endif; ?>
-    <?php endif; ?>
-    <div>
-      <label class="block text-xs font-semibold uppercase text-slate-500" for="term_id_sec">Term</label>
-      <select class="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm" id="term_id_sec" name="term_id" onchange="this.form.submit()">
-        <?php foreach ($terms as $t): ?>
-          <option value="<?= (int)$t['term_id'] ?>" <?= ((int)$t['term_id'] === (int)$term_id) ? 'selected' : '' ?>>
-            <?= htmlspecialchars($t['code']) ?> — <?= htmlspecialchars($t['name']) ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div>
-      <label class="block text-xs font-semibold uppercase text-slate-500" for="sec_dept_id">Section department</label>
-      <select class="mt-1 w-full min-w-[10rem] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm" id="sec_dept_id" name="dept_id">
-        <option value="">All departments</option>
-        <?php foreach ($valid_dept_ids_for_select as $did): ?>
-          <option value="<?= htmlspecialchars((string)$did) ?>" <?= (string)$did === $dept_id ? ' selected' : '' ?>><?= htmlspecialchars((string)$did) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div class="min-w-[14rem] flex-1">
-      <label class="block text-xs font-semibold uppercase text-slate-500" for="sec_q">Sections search</label>
-      <input
-        class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
-        id="sec_q"
-        name="sec_q"
-        value="<?= htmlspecialchars($sec_q) ?>"
-        placeholder="Course ID, instructor, room, MW 10…"
-      />
-    </div>
-    <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Apply section filters</button>
-  </form>
-
-  <?php if (!$sections): ?>
-    <div class="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 text-sm text-slate-600 shadow-sm">
-      No sections for this term matching<?= ($dept_id !== '' || $sec_q !== '') ? ' these filters.' : '.' ?>
-    </div>
-  <?php else: ?>
-    <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <table class="min-w-full text-left text-sm">
-        <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-          <tr>
-            <th class="px-4 py-3">Course</th>
-            <th class="px-4 py-3">Section</th>
-            <th class="px-4 py-3">Dept</th>
-            <th class="px-4 py-3">Faculty</th>
-            <th class="px-4 py-3">When / where</th>
-            <th class="px-4 py-3">Cap</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-200 text-slate-800">
-          <?php foreach ($sections as $row): ?>
-            <tr class="hover:bg-slate-50/80">
-              <td class="px-4 py-3">
-                <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)$row['course_id']) ?></div>
-                <div class="text-xs text-slate-500"><?= htmlspecialchars((string)$row['course_name']) ?> (<?= (int)$row['credits'] ?> cr)</div>
-              </td>
-              <td class="px-4 py-3 font-mono text-xs"><?= (int)$row['section_id'] ?></td>
-              <td class="px-4 py-3"><?= htmlspecialchars((string)($row['dept_id'] ?? '')) ?></td>
-              <td class="px-4 py-3 text-sm">
-                <?= htmlspecialchars(trim((($row['fac_first'] ?? '') . ' ' . ($row['fac_last'] ?? '')))) ?: '—' ?>
-              </td>
-              <td class="px-4 py-3 text-xs text-slate-600">
-                <?= htmlspecialchars(trim((($row['meeting_days'] ?? '') . ' ' . ($row['meeting_time'] ?? '')))) ?>
-                <?php if (!empty($row['room'])): ?>
-                  <span class="text-slate-400"> · </span> <?= htmlspecialchars((string)$row['room']) ?>
-                <?php endif; ?>
-              </td>
-              <td class="px-4 py-3"><?= (int)$row['capacity'] ?></td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  <?php endif; ?>
-<?php endif; ?>
+<?php /* People-only view: terms/departments/courses/sections intentionally omitted. */ ?>

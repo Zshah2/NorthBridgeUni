@@ -43,15 +43,71 @@ $docTitle = isset($pageTitle) && is_string($pageTitle) && $pageTitle !== ''
     </div>
   </header>
 
-  <main class="relative mx-auto max-w-[min(100vw-2rem,96rem)] px-4 py-10 sm:px-6">
-    <div class="grid gap-6 lg:grid-cols-12">
-      <aside class="lg:col-span-3">
+  <button
+    type="button"
+    id="admin-nav-open"
+    class="fixed right-5 top-5 z-[90] inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    aria-haspopup="dialog"
+    aria-controls="admin-nav-drawer"
+    aria-expanded="false"
+  >
+    <span class="font-mono text-base leading-none">≡</span>
+    Menu
+  </button>
+
+  <div id="admin-nav-drawer" class="fixed inset-0 z-[80] hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
+    <div class="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" data-admin-nav-close="1"></div>
+    <div class="absolute right-0 top-0 flex h-full w-[min(22rem,92vw)] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
+      <div class="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div class="text-sm font-semibold text-slate-900">Navigation</div>
+        <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-200/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" data-admin-nav-close="1">
+          Close
+        </button>
+      </div>
+      <div class="min-h-0 overflow-y-auto p-4">
         <?php require view_path('partials/admin_portal_sidebar.php'); ?>
-      </aside>
-      <div class="lg:col-span-9">
-        <?= $content ?>
       </div>
     </div>
+  </div>
+
+  <main class="relative mx-auto max-w-[min(100vw-2rem,110rem)] px-4 py-10 sm:px-6">
+    <?= $content ?>
   </main>
+
+  <script>
+  (function () {
+    var openBtn = document.getElementById('admin-nav-open');
+    var drawer = document.getElementById('admin-nav-drawer');
+    if (!openBtn || !drawer) return;
+
+    function openDrawer() {
+      drawer.classList.remove('hidden');
+      document.documentElement.classList.add('overflow-hidden');
+      openBtn.setAttribute('aria-expanded', 'true');
+    }
+    function closeDrawer() {
+      drawer.classList.add('hidden');
+      document.documentElement.classList.remove('overflow-hidden');
+      openBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    openBtn.addEventListener('click', openDrawer);
+    drawer.querySelectorAll('[data-admin-nav-close]').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        closeDrawer();
+      });
+    });
+    drawer.querySelectorAll('a[href]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        closeDrawer();
+      });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (!drawer.classList.contains('hidden')) closeDrawer();
+    });
+  })();
+  </script>
 </body>
 </html>

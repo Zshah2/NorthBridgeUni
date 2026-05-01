@@ -282,20 +282,68 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         if ($isAdmin) {
             $tceRaw = trim((string)($_POST['total_credit_earned'] ?? ''));
-            if ($tceRaw !== '' && ctype_digit($tceRaw)) {
-                $tce = (int)$tceRaw;
-                $hasLim = $pdo->prepare('SELECT 1 FROM ug_credit_limits WHERE student_id = ? LIMIT 1');
-                $hasLim->execute([$sid]);
-                if ($hasLim->fetchColumn()) {
-                    $pdo->prepare('UPDATE ug_credit_limits SET total_credit_earned = ? WHERE student_id = ?')->execute([$tce, $sid]);
-                } else {
-                    $stLabel = ($ugEx && !empty($ugEx['student_type'])) ? (string)$ugEx['student_type'] : 'Unknown';
-                    $yr = (int)date('Y');
-                    $band = admin_ug_credit_band_from_student_type($stLabel);
-                    $pdo->prepare('INSERT INTO ug_credit_limits (student_id, student_type, year, max_credit, min_credit, total_credit_earned) VALUES (?, ?, ?, ?, ?, ?)')->execute([
-                        $sid, $stLabel, $yr, $band['max_credit'], $band['min_credit'], $tce,
-                    ]);
+            $mxRaw = trim((string)($_POST['max_credit'] ?? ''));
+            $mnRaw = trim((string)($_POST['min_credit'] ?? ''));
+            $tceVal = ($tceRaw !== '' && ctype_digit($tceRaw)) ? max(0, (int)$tceRaw) : null;
+            $mxVal = ($mxRaw !== '' && ctype_digit($mxRaw)) ? (int)$mxRaw : null;
+            $mnVal = ($mnRaw !== '' && ctype_digit($mnRaw)) ? (int)$mnRaw : null;
+            if ($mxVal !== null && ($mxVal < 1 || $mxVal > 40)) {
+                $mxVal = null;
+            }
+            if ($mnVal !== null && ($mnVal < 1 || $mnVal > 40)) {
+                $mnVal = null;
+            }
+            $hasUgPosted = $tceVal !== null || $mxVal !== null || $mnVal !== null;
+            if ($hasUgPosted && $mxVal !== null && $mnVal !== null && $mnVal > $mxVal) {
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=profile_invalid'));
+                exit;
+            }
+
+            $hasLimStmt = $pdo->prepare('SELECT max_credit, min_credit FROM ug_credit_limits WHERE student_id = ? LIMIT 1');
+            $hasLimStmt->execute([$sid]);
+            $existingLim = $hasLimStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($existingLim) {
+                $nextMx = $mxVal ?? (int)($existingLim['max_credit'] ?? 18);
+                $nextMn = $mnVal ?? (int)($existingLim['min_credit'] ?? 12);
+                if ($mxVal !== null || $mnVal !== null) {
+                    if ($nextMn > $nextMx) {
+                        header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=profile_invalid'));
+                        exit;
+                    }
                 }
+                $sets = [];
+                $params = [];
+                if ($tceVal !== null) {
+                    $sets[] = 'total_credit_earned = ?';
+                    $params[] = $tceVal;
+                }
+                if ($mxVal !== null) {
+                    $sets[] = 'max_credit = ?';
+                    $params[] = $mxVal;
+                }
+                if ($mnVal !== null) {
+                    $sets[] = 'min_credit = ?';
+                    $params[] = $mnVal;
+                }
+                if ($sets !== []) {
+                    $params[] = $sid;
+                    $pdo->prepare('UPDATE ug_credit_limits SET ' . implode(', ', $sets) . ' WHERE student_id = ?')->execute($params);
+                }
+            } elseif ($hasUgPosted) {
+                $stLabel = ($ugEx && !empty($ugEx['student_type'])) ? (string)$ugEx['student_type'] : 'Unknown';
+                $yr = (int)date('Y');
+                $band = admin_ug_credit_band_from_student_type($stLabel);
+                $finalMx = $mxVal ?? $band['max_credit'];
+                $finalMn = $mnVal ?? $band['min_credit'];
+                if ($finalMn > $finalMx) {
+                    header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=profile_invalid'));
+                    exit;
+                }
+                $finalTce = $tceVal ?? 0;
+                $pdo->prepare('INSERT INTO ug_credit_limits (student_id, student_type, year, max_credit, min_credit, total_credit_earned) VALUES (?, ?, ?, ?, ?, ?)')->execute([
+                    $sid, $stLabel, $yr, $finalMx, $finalMn, $finalTce,
+                ]);
             }
         }
 
@@ -317,12 +365,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=forbidden'));
             exit;
         }
+        $genderIn = trim((string)($_POST['gender'] ?? ''));
+        $stateRaw = trim((string)($_POST['state'] ?? ''));
+        $stateIn = strtoupper($stateRaw);
         $emailIn = trim((string)($_POST['email'] ?? ''));
         $phoneIn = trim((string)($_POST['phone'] ?? ''));
+        $aptIn = trim((string)($_POST['apt_no'] ?? ''));
+        $streetIn = trim((string)($_POST['street'] ?? ''));
+        $cityIn = trim((string)($_POST['city'] ?? ''));
+        $zipIn = trim((string)($_POST['zip_code'] ?? ''));
         $officeIn = trim((string)($_POST['office_number'] ?? ''));
         $inputErr = false;
         $setsU = [];
         $paramsU = [];
+        $allowedG = admin_people_genders();
+        if ($genderIn !== '' && $genderIn !== '__keep__' && in_array($genderIn, $allowedG, true)) {
+            $setsU[] = 'gender = ?';
+            $paramsU[] = $genderIn;
+        }
+        $stateCodes = admin_people_us_state_codes();
+        if ($stateRaw !== '' && strcasecmp($stateRaw, '__keep__') !== 0 && in_array($stateIn, $stateCodes, true)) {
+            $setsU[] = 'state = ?';
+            $paramsU[] = $stateIn;
+        }
         if ($emailIn !== '') {
             if (filter_var($emailIn, FILTER_VALIDATE_EMAIL)) {
                 $setsU[] = 'email = ?';
@@ -337,6 +402,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $paramsU[] = $phoneIn;
             } else {
                 $inputErr = true;
+            }
+        }
+        foreach (['apt_no' => $aptIn, 'street' => $streetIn, 'city' => $cityIn, 'zip_code' => $zipIn] as $col => $val) {
+            if ($val !== '') {
+                $setsU[] = $col . ' = ?';
+                $paramsU[] = $val;
             }
         }
         if ($inputErr) {
@@ -801,10 +872,23 @@ function nav_item(string $href, string $label, bool $active): string
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
   <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } } };</script>
+  <style>
+    @media (min-width: 1024px) {
+      html.admin-nav-collapsed #adminSidebar {
+        transform: translateX(-100%);
+      }
+      html.admin-nav-collapsed #adminMain {
+        padding-left: 1.5rem;
+      }
+      html:not(.admin-nav-collapsed) #adminMain {
+        padding-left: 19rem;
+      }
+    }
+  </style>
 </head>
 <body class="min-h-full bg-slate-50 font-sans text-slate-900 antialiased">
-  <header class="relative border-b border-slate-200 bg-white/80 backdrop-blur">
-    <div class="mx-auto flex max-w-[min(100vw-2rem,96rem)] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
+    <div class="mx-auto flex max-w-[min(100vw-2rem,110rem)] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
       <div class="flex items-center gap-3">
         <span class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white">NB</span>
         <div>
@@ -816,6 +900,30 @@ function nav_item(string $href, string $label, bool $active): string
         </div>
       </div>
       <div class="flex items-center gap-3">
+        <button
+          type="button"
+          id="adminSidebarToggle"
+          class="hidden rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:inline-flex"
+          aria-controls="adminSidebar"
+          aria-expanded="true"
+          title="Hide sidebar"
+        >
+          Hide
+        </button>
+        <button
+          type="button"
+          id="adminMenuButton"
+          class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:hidden"
+          aria-haspopup="dialog"
+          aria-controls="adminMenuDrawer"
+          aria-expanded="false"
+          title="Menu"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5">
+            <path fill="currentColor" d="M4 6.5h16a1 1 0 0 0 0-2H4a1 1 0 0 0 0 2Zm16 5.5H4a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2Zm0 7H4a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2Z"/>
+          </svg>
+          <span class="sr-only">Open menu</span>
+        </button>
         <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm text-slate-600 hover:text-slate-900">Site home</a>
         <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
@@ -825,7 +933,42 @@ function nav_item(string $href, string $label, bool $active): string
     </div>
   </header>
 
-  <main class="relative mx-auto max-w-[min(100vw-2rem,96rem)] px-4 py-10 sm:px-6">
+  <div id="adminMenuBackdrop" class="fixed inset-0 z-40 hidden bg-slate-950/40 backdrop-blur-[1px] lg:hidden"></div>
+  <div id="adminMenuDrawer" class="fixed right-0 top-0 z-50 hidden h-full w-[min(92vw,22rem)] border-l border-slate-200 bg-white shadow-xl lg:hidden">
+    <div class="flex h-full flex-col">
+      <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+        <div>
+          <div class="text-sm font-semibold text-slate-900">Menu</div>
+          <div class="mt-0.5 text-xs text-slate-500">Northbridge Admin</div>
+        </div>
+        <button type="button" id="adminMenuClose" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          Close
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-5 py-5">
+        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
+        <nav class="mt-4 space-y-1 text-sm">
+          <?= nav_item(url('/admin.php?view=dashboard'), 'Dashboard', $view === 'dashboard') ?>
+          <?= nav_item(url('/admin.php?view=people'), 'ID lookup', $view === 'people') ?>
+          <?= nav_item(url('/admin.php?view=schedule'), 'Master schedule', $view === 'schedule') ?>
+          <?= nav_item(url('/admin.php?view=enrollment'), 'Directory', $view === 'enrollment') ?>
+          <?= nav_item(url('/admin.php?view=registration'), 'Registration', $view === 'registration') ?>
+        </nav>
+
+        <p class="mt-4 text-xs leading-relaxed text-slate-500">
+          <?php if ($isViewer): ?>
+            <strong class="text-slate-600">Viewer:</strong> browse only. No add/drop or hold changes.
+          <?php elseif ($isLimited): ?>
+            <strong class="text-slate-600">Limited:</strong> holds, registration add/drop. No grade import.
+          <?php else: ?>
+            <strong class="text-slate-600">Admin:</strong> full access.
+          <?php endif; ?>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <main id="adminMain" class="relative w-full px-4 py-10 sm:px-6">
     <?php
     $flashMsg = trim((string)($_GET['msg'] ?? ''));
     $flashMap = [
@@ -850,9 +993,9 @@ function nav_item(string $href, string $label, bool $active): string
         echo '<div class="mb-6 rounded-2xl border ' . $fcls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($ftext) . '</div>';
     }
     ?>
-    <div class="grid gap-6 lg:grid-cols-12">
-      <aside class="lg:col-span-3">
-        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="min-w-0">
+      <aside id="adminSidebar" class="hidden lg:block fixed left-0 top-[4.75rem] z-20 h-[calc(100vh-4.75rem)] w-[18rem] overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-200 ease-out">
+        <div class="pr-1">
           <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
           <nav class="mt-4 space-y-1 text-sm">
             <?= nav_item(url('/admin.php?view=dashboard'), 'Dashboard', $view === 'dashboard') ?>
@@ -872,7 +1015,7 @@ function nav_item(string $href, string $label, bool $active): string
           </p>
         </div>
       </aside>
-      <div class="lg:col-span-9">
+      <div class="mx-auto w-full max-w-[min(100vw-2rem,110rem)] min-w-0">
         <?php if ($view === 'dashboard'): ?>
           <h1 class="text-2xl font-semibold text-slate-900">Dashboard</h1>
           <p class="mt-2 text-sm text-slate-600">A snapshot of operations, data quality, and current-term activity.</p>
@@ -1622,8 +1765,8 @@ function nav_item(string $href, string $label, bool $active): string
                                 <th class="px-3 py-2">Term</th>
                                 <th class="px-3 py-2">Course</th>
                                 <th class="px-3 py-2">Grade</th>
-                                <th class="px-3 py-2">Pts</th>
-                                <th class="px-3 py-2">Cr</th>
+                                <th class="px-3 py-2"><abbr title="Quality points (per course, 4.0 scale)">Pts</abbr></th>
+                                <th class="px-3 py-2"><abbr title="Credits earned toward GPA">Cr</abbr></th>
                               </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -1789,10 +1932,24 @@ function nav_item(string $href, string $label, bool $active): string
                           </div>
                           <?php endif; ?>
                           <?php if ($isAdmin): ?>
-                          <div class="sm:col-span-2">
-                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="people-up-tce">Registrar total credits earned (<code class="text-[11px]">ug_credit_limits.total_credit_earned</code>)</label>
-                            <input id="people-up-tce" name="total_credit_earned" type="number" min="0" step="1" placeholder="<?= $stuUgLimitRow ? (string)(int)($stuUgLimitRow['total_credit_earned'] ?? 0) : 'e.g. 90' ?>" class="mt-1 max-w-xs rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono" />
-                            <p class="mt-1 text-xs text-slate-500">Admin only. Updates or creates that row. If the row did not exist, min/max load bands use part-time vs full-time defaults from legacy <code class="rounded bg-slate-100 px-1">student_type</code> until CSV import fills real limits.</p>
+                          <div class="sm:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                            <div class="text-xs font-semibold uppercase tracking-wide text-indigo-950">Undergraduate credit limits (<code class="font-mono text-[11px] font-normal">ug_credit_limits</code>)</div>
+                            <p class="mt-1 text-xs text-slate-600">Registration checks <strong class="font-semibold text-slate-800">max credits per term</strong> against enrolled load. Leave any field blank to keep its current value when updating an existing row.</p>
+                            <div class="mt-3 grid gap-4 sm:grid-cols-3">
+                              <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="people-up-maxcr">Max credits (term load cap)</label>
+                                <input id="people-up-maxcr" name="max_credit" type="number" min="1" max="40" step="1" placeholder="<?= $stuUgLimitRow ? (string)(int)($stuUgLimitRow['max_credit'] ?? 18) : 'e.g. 18' ?>" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono tabular-nums" />
+                              </div>
+                              <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="people-up-mincr">Min credits (term floor)</label>
+                                <input id="people-up-mincr" name="min_credit" type="number" min="1" max="40" step="1" placeholder="<?= $stuUgLimitRow ? (string)(int)($stuUgLimitRow['min_credit'] ?? 12) : 'e.g. 12' ?>" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono tabular-nums" />
+                              </div>
+                              <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="people-up-tce">Registrar total earned</label>
+                                <input id="people-up-tce" name="total_credit_earned" type="number" min="0" step="1" placeholder="<?= $stuUgLimitRow ? (string)(int)($stuUgLimitRow['total_credit_earned'] ?? 0) : 'e.g. 90' ?>" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono tabular-nums" />
+                              </div>
+                            </div>
+                            <p class="mt-2 text-xs text-slate-500">Creating a new row without CSV import uses min/max defaults from legacy <code class="rounded bg-white px-1">student_type</code> for any blank limits. Import <span class="font-medium">UG_fulltime.csv</span> / <span class="font-medium">UG_parttime.csv</span> for registrar-backed bands.</p>
                           </div>
                           <?php endif; ?>
                           <div class="sm:col-span-2">
@@ -2062,16 +2219,42 @@ function nav_item(string $href, string $label, bool $active): string
                     <div class="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" data-close-fac-overlay="info"></div>
                     <div class="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
                       <div class="flex shrink-0 items-center justify-between gap-3 border-b border-violet-100 bg-violet-50/90 px-4 py-3">
-                        <h2 id="people-overlay-fac-info-title" class="text-lg font-semibold text-slate-900">Update info</h2>
+                        <h2 id="people-overlay-fac-info-title" class="text-lg font-semibold text-slate-900">Update information</h2>
                         <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-violet-100/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500" data-close-fac-overlay="info">Close</button>
                       </div>
                       <div class="min-h-0 overflow-y-auto p-4 sm:p-5">
-                        <p class="text-sm text-slate-600">Edit directory contact and office. Leave a field blank to keep its current value.</p>
+                        <?php
+                        $peopleGenderOpts = admin_people_genders();
+                        $peopleStateCodes = admin_people_us_state_codes();
+                        $peopleCurGender = trim((string)($ur['gender'] ?? ''));
+                        $peopleCurState = strtoupper(trim((string)($ur['state'] ?? '')));
+                        ?>
+                        <p class="text-sm text-slate-600">Same profile fields as students (minus student-only sections). Leave optional fields blank to keep current values.</p>
                         <?php if ($canManageHolds): ?>
-                        <form class="mt-4 grid gap-4" method="post" action="<?= htmlspecialchars(url('/admin.php?view=people&id=' . (int)$peopleId . '&people_panel=info')) ?>">
+                        <form class="mt-4 grid gap-4 sm:grid-cols-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=people&id=' . (int)$peopleId . '&people_panel=info')) ?>">
                           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
                           <input type="hidden" name="action" value="people_update_faculty" />
                           <input type="hidden" name="faculty_id" value="<?= (int)$peopleId ?>" />
+                          <div class="sm:col-span-2 grid gap-4 sm:grid-cols-2">
+                            <div>
+                              <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-gender">Gender</label>
+                              <select id="fac-up-gender" name="gender" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                                <option value="__keep__">Keep current<?= $peopleCurGender !== '' ? ' (' . htmlspecialchars($peopleCurGender) . ')' : '' ?></option>
+                                <?php foreach ($peopleGenderOpts as $g): ?>
+                                  <option value="<?= htmlspecialchars($g) ?>"><?= htmlspecialchars($g) ?></option>
+                                <?php endforeach; ?>
+                              </select>
+                            </div>
+                            <div>
+                              <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-state">State (US)</label>
+                              <select id="fac-up-state" name="state" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono">
+                                <option value="__keep__">Keep current<?= $peopleCurState !== '' ? ' (' . htmlspecialchars($peopleCurState) . ')' : '' ?></option>
+                                <?php foreach ($peopleStateCodes as $sc): ?>
+                                  <option value="<?= htmlspecialchars($sc) ?>"><?= htmlspecialchars($sc) ?></option>
+                                <?php endforeach; ?>
+                              </select>
+                            </div>
+                          </div>
                           <div>
                             <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-email">Email</label>
                             <input id="fac-up-email" name="email" type="email" autocomplete="off" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
@@ -2081,11 +2264,27 @@ function nav_item(string $href, string $label, bool $active): string
                             <input id="fac-up-phone" name="phone" type="text" inputmode="tel" autocomplete="off" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                           </div>
                           <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-apt">Apt / unit</label>
+                            <input id="fac-up-apt" name="apt_no" type="text" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-street">Street</label>
+                            <input id="fac-up-street" name="street" type="text" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-city">City</label>
+                            <input id="fac-up-city" name="city" type="text" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-zip">ZIP</label>
+                            <input id="fac-up-zip" name="zip_code" type="text" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                          </div>
+                          <div>
                             <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="fac-up-office">Office</label>
                             <input id="fac-up-office" name="office_number" type="text" placeholder="Leave blank to keep" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
                           </div>
-                          <div>
-                            <button type="submit" class="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Save faculty profile</button>
+                          <div class="sm:col-span-2">
+                            <button type="submit" class="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Save updates</button>
                           </div>
                         </form>
                         <?php else: ?>
@@ -2146,6 +2345,8 @@ function nav_item(string $href, string $label, bool $active): string
                       <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                         <h3 class="text-sm font-semibold text-slate-900">Profile &amp; office</h3>
                         <dl class="mt-3 space-y-2 text-sm text-slate-700">
+                          <div class="flex justify-between gap-3"><dt class="text-slate-500">DOB</dt><dd class="font-medium"><?= $__fmtDate($ur['dob'] ?? null) ?></dd></div>
+                          <div class="flex justify-between gap-3"><dt class="text-slate-500">Gender</dt><dd class="font-medium"><?= $__empty(($ur['gender'] ?? null)) ? '—' : htmlspecialchars((string)$ur['gender']) ?></dd></div>
                           <div class="flex justify-between gap-3"><dt class="text-slate-500">Rank / type</dt><dd class="text-right font-medium"><?php
                             $__fr = trim((string)(($facultyMeta ?? [])['rank'] ?? ''));
                             $__ft = trim((string)(($facultyMeta ?? [])['faculty_type'] ?? ''));
@@ -2156,6 +2357,13 @@ function nav_item(string $href, string $label, bool $active): string
                           <div class="flex justify-between gap-3"><dt class="text-slate-500">Hire date</dt><dd class="font-medium"><?= $facultyMeta && ($facultyMeta['hire_date'] ?? null) ? htmlspecialchars((string)$facultyMeta['hire_date']) : '—' ?></dd></div>
                           <div class="flex justify-between gap-3"><dt class="text-slate-500">Email</dt><dd class="break-all font-medium"><?php $___fe = (($facultyMeta ?? [])['email'] ?? null) ?: ($ur['email'] ?? null); echo ($___fe !== null && (string)$___fe !== '') ? htmlspecialchars(trim((string)$___fe)) : '—'; ?></dd></div>
                           <div class="flex justify-between gap-3"><dt class="text-slate-500">Phone</dt><dd class="font-medium"><?php $___fp = (($facultyMeta ?? [])['phone_number'] ?? null) ?: ($ur['phone_number'] ?? null); echo ($___fp !== null && (string)$___fp !== '') ? htmlspecialchars(trim((string)$___fp)) : '—'; ?></dd></div>
+                          <div class="border-t border-slate-100 pt-2"><span class="text-slate-500">Address</span>
+                            <?php if ($__empty($ur['street'] ?? null) && $__empty($ur['city'] ?? null)): ?>
+                              <p class="mt-1 text-slate-600">—</p>
+                            <?php else: ?>
+                              <p class="mt-1 leading-relaxed text-slate-800"><?= htmlspecialchars(trim(((string)($ur['apt_no'] ?? '') . ' ' . (string)($ur['street'] ?? '')))) ?><br /><?= htmlspecialchars(trim(((string)($ur['city'] ?? '') . ', ' . (string)($ur['state'] ?? '') . ' ' . (string)($ur['zip_code'] ?? '')))) ?></p>
+                            <?php endif; ?>
+                          </div>
                         </dl>
                       </div>
                       <?php if ($facDepts): ?>
@@ -2390,20 +2598,29 @@ function nav_item(string $href, string $label, bool $active): string
           $terms = $pdo->query('SELECT code, name FROM terms ORDER BY start_date DESC')->fetchAll(PDO::FETCH_ASSOC);
           ?>
           <h1 class="text-2xl font-semibold text-slate-900">Registration</h1>
-          <form class="mt-4 flex flex-wrap gap-2" method="get">
-            <input type="hidden" name="view" value="registration" />
-            <input name="student_id" value="<?= htmlspecialchars($regStudentRaw) ?>" class="rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Student ID" />
-            <select name="term" class="rounded-xl border border-slate-200 px-3 py-2 text-sm">
-              <?php foreach ($terms as $t): $c = (string)$t['code']; ?>
-                <option value="<?= htmlspecialchars($c) ?>" <?= $c === $termCode ? 'selected' : '' ?>><?= htmlspecialchars($c) ?></option>
-              <?php endforeach; ?>
-            </select>
-            <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white" type="submit">Load</button>
-          </form>
           <?php
           $creditSummary = ['courses' => 0, 'credits' => 0, 'max' => 18];
           $enrolledNow = [];
+          $waitlistedNow = [];
+          $regStudentUser = null;
+          $regHasHold = false;
+          $termId = null;
+          $browseQ = trim((string)($_GET['browse_q'] ?? ''));
+          $browseRows = [];
+
           if ($regStudentId !== null && $termCode !== '') {
+              try {
+                  $tu = $pdo->prepare('SELECT u.user_id, u.first_name, u.last_name FROM users u JOIN students s ON s.student_id = u.user_id WHERE u.user_id = ? LIMIT 1');
+                  $tu->execute([$regStudentId]);
+                  $regStudentUser = $tu->fetch(PDO::FETCH_ASSOC) ?: null;
+              } catch (Throwable) {
+              }
+              try {
+                  $hc = $pdo->prepare('SELECT 1 FROM student_holds WHERE student_id = ? AND is_active = 1 LIMIT 1');
+                  $hc->execute([$regStudentId]);
+                  $regHasHold = (bool)$hc->fetchColumn();
+              } catch (Throwable) {
+              }
               try {
                   $mx = $pdo->prepare('SELECT max_credit FROM ug_credit_limits WHERE student_id = ? LIMIT 1');
                   $mx->execute([$regStudentId]);
@@ -2413,55 +2630,400 @@ function nav_item(string $href, string $label, bool $active): string
                   }
               } catch (Throwable) {
               }
+
+              try {
+                  $tId = $pdo->prepare('SELECT term_id FROM terms WHERE code = ? LIMIT 1');
+                  $tId->execute([$termCode]);
+                  $tv = $tId->fetchColumn();
+                  if ($tv !== false && $tv !== null && is_numeric($tv)) {
+                      $termId = (int)$tv;
+                  }
+              } catch (Throwable) {
+              }
+
               $st = $pdo->prepare('
-                SELECT s.section_id, c.course_id, c.course_name, c.credits
+                SELECT e.status, s.section_id, c.course_id, c.course_name, c.credits,
+                       s.meeting_days, s.meeting_time, s.room,
+                       COALESCE(u.first_name,"") AS fac_first, COALESCE(u.last_name,"") AS fac_last
                 FROM enrollments e
                 JOIN sections s ON s.section_id = e.section_id
                 JOIN courses c ON c.course_id = s.course_id
                 JOIN terms t ON t.term_id = s.term_id
-                WHERE e.student_id = ? AND e.status = "enrolled" AND t.code = ?
+                LEFT JOIN faculty f ON f.faculty_id = s.faculty_id
+                LEFT JOIN users u ON u.user_id = f.faculty_id
+                WHERE e.student_id = ? AND t.code = ? AND e.status IN ("enrolled","waitlisted")
+                ORDER BY e.status DESC, c.course_id
               ');
               $st->execute([$regStudentId, $termCode]);
-              $enrolledNow = $st->fetchAll(PDO::FETCH_ASSOC);
-              foreach ($enrolledNow as $r) {
-                  $creditSummary['courses']++;
-                  $creditSummary['credits'] += (int)($r['credits'] ?? 0);
+              $allNow = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+              foreach ($allNow as $r) {
+                  if (($r['status'] ?? '') === 'enrolled') {
+                      $enrolledNow[] = $r;
+                      $creditSummary['courses']++;
+                      $creditSummary['credits'] += (int)($r['credits'] ?? 0);
+                  } elseif (($r['status'] ?? '') === 'waitlisted') {
+                      $waitlistedNow[] = $r;
+                  }
+              }
+
+              if ($termId !== null) {
+                  try {
+                      $sql = '
+                        SELECT
+                          s.section_id,
+                          c.course_id,
+                          c.course_name,
+                          c.credits,
+                          c.dept_id,
+                          COALESCE(u.first_name,"") AS fac_first,
+                          COALESCE(u.last_name,"") AS fac_last,
+                          s.meeting_days,
+                          s.meeting_time,
+                          s.room,
+                          s.capacity,
+                          COALESCE(en.enrolled_cnt, 0) AS enrolled_cnt,
+                          COALESCE(wl.waitlisted_cnt, 0) AS waitlisted_cnt
+                        FROM sections s
+                        JOIN courses c ON c.course_id = s.course_id
+                        JOIN terms t ON t.term_id = s.term_id
+                        LEFT JOIN faculty f ON f.faculty_id = s.faculty_id
+                        LEFT JOIN users u ON u.user_id = f.faculty_id
+                        LEFT JOIN (
+                          SELECT section_id, COUNT(*) AS enrolled_cnt
+                          FROM enrollments
+                          WHERE status = "enrolled"
+                          GROUP BY section_id
+                        ) en ON en.section_id = s.section_id
+                        LEFT JOIN (
+                          SELECT section_id, COUNT(*) AS waitlisted_cnt
+                          FROM enrollments
+                          WHERE status = "waitlisted"
+                          GROUP BY section_id
+                        ) wl ON wl.section_id = s.section_id
+                        WHERE t.term_id = ?
+                      ';
+                      $bind = [$termId];
+                      if ($browseQ !== '') {
+                          $sql .= ' AND (
+                            CAST(s.section_id AS CHAR) LIKE ?
+                            OR c.course_id LIKE ?
+                            OR LOWER(c.course_name) LIKE ?
+                            OR LOWER(CONCAT(COALESCE(u.first_name,"")," ",COALESCE(u.last_name,""))) LIKE ?
+                            OR LOWER(COALESCE(s.room,"")) LIKE ?
+                            OR LOWER(COALESCE(s.meeting_days,"")) LIKE ?
+                            OR LOWER(COALESCE(s.meeting_time,"")) LIKE ?
+                          )';
+                          $likeId = '%' . $browseQ . '%';
+                          $like = '%' . strtolower($browseQ) . '%';
+                          $bind = array_merge($bind, [$likeId, $likeId, $like, $like, $like, $like, $like]);
+                      }
+                      $sql .= ' ORDER BY c.course_id, s.section_id LIMIT 80';
+                      $bst = $pdo->prepare($sql);
+                      $bst->execute($bind);
+                      $browseRows = $bst->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                  } catch (Throwable) {
+                      $browseRows = [];
+                  }
               }
           }
           ?>
-          <?php if ($regStudentId !== null): ?>
-            <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-              <div class="text-sm font-semibold">Load: <?= (int)$creditSummary['credits'] ?> / <?= (int)$creditSummary['max'] ?> credits · <?= (int)$creditSummary['courses'] ?> course(s)</div>
-              <ul class="mt-2 text-sm text-slate-600">
-                <?php foreach ($enrolledNow as $e): ?>
-                  <li><?= htmlspecialchars((string)$e['course_id']) ?> (#<?= (int)$e['section_id'] ?>)</li>
-                <?php endforeach; ?>
-              </ul>
-              <?php if ($canRegister): ?>
-                <form class="mt-4 flex flex-wrap gap-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode))) ?>">
-                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-                  <input type="hidden" name="action" value="reg_add" />
-                  <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
-                  <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
-                  <input name="section_id" class="rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Section ID" />
-                  <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white" type="submit">Add</button>
-                </form>
-                <form class="mt-2 flex flex-wrap gap-2" method="post">
-                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-                  <input type="hidden" name="action" value="reg_drop" />
-                  <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
-                  <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
-                  <input name="section_id" class="rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Section ID" />
-                  <button class="rounded-xl border border-slate-200 px-4 py-2 text-sm" type="submit">Drop</button>
-                </form>
-              <?php else: ?>
-                <p class="mt-4 text-sm text-slate-500">Viewer: use read-only; switch to Limited or Admin to add/drop.</p>
+          <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
+              <input type="hidden" name="view" value="registration" />
+              <div class="min-w-0 flex-1 sm:max-w-xs">
+                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="reg-student-id">Student ID</label>
+                <input id="reg-student-id" name="student_id" value="<?= htmlspecialchars($regStudentRaw) ?>" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono" placeholder="e.g. 900651" />
+              </div>
+              <div class="sm:w-60">
+                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="reg-term">Term</label>
+                <select id="reg-term" name="term" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <?php foreach ($terms as $t): $c = (string)$t['code']; ?>
+                    <option value="<?= htmlspecialchars($c) ?>" <?= $c === $termCode ? 'selected' : '' ?>><?= htmlspecialchars($c) ?> — <?= htmlspecialchars((string)$t['name']) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <button class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Load</button>
+              <?php if ($regStudentId !== null && $termCode !== ''): ?>
+                <input type="hidden" name="browse_q" value="<?= htmlspecialchars($browseQ, ENT_QUOTES, 'UTF-8') ?>" />
               <?php endif; ?>
+            </form>
+
+            <?php if ($regStudentId !== null): ?>
+              <?php
+              $stuName = $regStudentUser ? trim((string)($regStudentUser['first_name'] ?? '') . ' ' . (string)($regStudentUser['last_name'] ?? '')) : '';
+              ?>
+              <div class="mt-4 flex flex-wrap items-center gap-2 text-sm">
+                <span class="inline-flex items-center gap-2 rounded-lg bg-sky-50 px-2 py-1 ring-1 ring-sky-200/80">
+                  <span class="font-mono font-semibold text-sky-950"><?= (int)$regStudentId ?></span>
+                  <span class="text-sky-800"><?= $stuName !== '' ? htmlspecialchars($stuName) : 'Student' ?></span>
+                </span>
+                <span class="rounded-lg bg-slate-100 px-2 py-1 ring-1 ring-slate-200">
+                  <span class="font-semibold text-slate-800"><?= htmlspecialchars($termCode) ?></span>
+                </span>
+                <span class="rounded-lg bg-white px-2 py-1 ring-1 ring-slate-200">
+                  <span class="font-semibold text-slate-900"><?= (int)$creditSummary['credits'] ?></span>/<span class="text-slate-600"><?= (int)$creditSummary['max'] ?></span> cr
+                </span>
+                <?php if ($regHasHold): ?>
+                  <span class="rounded-lg bg-rose-50 px-2 py-1 text-rose-950 ring-1 ring-rose-200">Blocking hold</span>
+                <?php else: ?>
+                  <span class="rounded-lg bg-emerald-50 px-2 py-1 text-emerald-950 ring-1 ring-emerald-200">No holds</span>
+                <?php endif; ?>
+                <a class="ml-auto text-sm font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=people&id=' . (int)$regStudentId)) ?>">Open student record →</a>
+              </div>
+            <?php endif; ?>
+          </div>
+
+          <?php if ($regStudentId !== null && $termCode !== ''): ?>
+            <div class="mt-6 grid gap-6 lg:grid-cols-12">
+              <div class="lg:col-span-7 space-y-4">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div class="flex items-end justify-between gap-3">
+                    <div>
+                      <h2 class="text-sm font-semibold text-slate-900">Current schedule</h2>
+                      <p class="mt-1 text-xs text-slate-500">Enrolled and waitlisted sections for <?= htmlspecialchars($termCode) ?>.</p>
+                    </div>
+                    <div class="text-xs text-slate-500"><?= (int)$creditSummary['courses'] ?> enrolled · <?= (int)$creditSummary['credits'] ?> credits</div>
+                  </div>
+
+                  <?php if (!$enrolledNow && !$waitlistedNow): ?>
+                    <div class="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">No registrations yet for this term.</div>
+                  <?php else: ?>
+                    <div class="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                      <table class="min-w-full text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                          <tr>
+                            <th class="px-3 py-2">Status</th>
+                            <th class="px-3 py-2">Course</th>
+                            <th class="px-3 py-2">Section</th>
+                            <th class="px-3 py-2">When / where</th>
+                            <th class="px-3 py-2">Cr</th>
+                            <th class="px-3 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                          <?php foreach (array_merge($enrolledNow, $waitlistedNow) as $r): ?>
+                            <?php $st = (string)($r['status'] ?? ''); ?>
+                            <tr class="hover:bg-slate-50/70">
+                              <td class="px-3 py-2 text-xs font-semibold uppercase <?= $st === 'enrolled' ? 'text-emerald-700' : 'text-amber-700' ?>"><?= htmlspecialchars($st) ?></td>
+                              <td class="px-3 py-2">
+                                <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($r['course_id'] ?? '')) ?></div>
+                                <div class="text-xs text-slate-600"><?= htmlspecialchars((string)($r['course_name'] ?? '')) ?></div>
+                                <?php $fn = trim((string)($r['fac_first'] ?? '') . ' ' . (string)($r['fac_last'] ?? '')); ?>
+                                <?php if ($fn !== ''): ?><div class="text-[11px] text-slate-500"><?= htmlspecialchars($fn) ?></div><?php endif; ?>
+                              </td>
+                              <td class="px-3 py-2 font-mono text-xs text-slate-700">#<?= (int)($r['section_id'] ?? 0) ?></td>
+                              <td class="px-3 py-2 text-xs text-slate-600">
+                                <?= htmlspecialchars(trim((string)($r['meeting_days'] ?? '') . ' ' . (string)($r['meeting_time'] ?? ''))) ?>
+                                <?php if (!empty($r['room'])): ?><span class="text-slate-400"> · </span><?= htmlspecialchars((string)$r['room']) ?><?php endif; ?>
+                              </td>
+                              <td class="px-3 py-2 tabular-nums text-slate-700"><?= (int)($r['credits'] ?? 0) ?></td>
+                              <td class="px-3 py-2 text-right">
+                                <?php if ($canRegister): ?>
+                                  <form method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+                                    <input type="hidden" name="action" value="reg_drop" />
+                                    <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
+                                    <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                                    <input type="hidden" name="section_id" value="<?= (int)($r['section_id'] ?? 0) ?>" />
+                                    <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Drop</button>
+                                  </form>
+                                <?php else: ?>
+                                  <span class="text-xs text-slate-400">—</span>
+                                <?php endif; ?>
+                              </td>
+                            </tr>
+                          <?php endforeach; ?>
+                        </tbody>
+                      </table>
+                    </div>
+                  <?php endif; ?>
+                </div>
+              </div>
+
+              <div class="lg:col-span-5 space-y-4">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 class="text-sm font-semibold text-slate-900">Add class</h2>
+                  <p class="mt-1 text-xs text-slate-500">Add by Section ID (fast) or browse available sections for <?= htmlspecialchars($termCode) ?>.</p>
+
+                  <?php if ($canRegister): ?>
+                    <form class="mt-4 flex flex-wrap items-end gap-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+                      <input type="hidden" name="action" value="reg_add" />
+                      <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
+                      <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                      <div class="min-w-0 flex-1">
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="reg-add-section">Section ID</label>
+                        <input id="reg-add-section" name="section_id" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono" placeholder="e.g. 12031" />
+                      </div>
+                      <button class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Add</button>
+                    </form>
+                  <?php else: ?>
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Viewer role: you can browse, but cannot add/drop.</div>
+                  <?php endif; ?>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div class="flex items-end justify-between gap-3">
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-900">Browse sections</h3>
+                      <p class="mt-1 text-xs text-slate-500">Search course, instructor, room, days/time, or section ID.</p>
+                    </div>
+                  </div>
+                  <form class="mt-3 flex flex-wrap items-end gap-2" method="get">
+                    <input type="hidden" name="view" value="registration" />
+                    <input type="hidden" name="student_id" value="<?= htmlspecialchars($regStudentRaw) ?>" />
+                    <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                    <div class="min-w-0 flex-1">
+                      <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="reg-browse-q">Search</label>
+                      <input id="reg-browse-q" name="browse_q" value="<?= htmlspecialchars($browseQ) ?>" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="CS101, Smith, MW 10, 12031…" />
+                    </div>
+                    <button class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" type="submit">Search</button>
+                  </form>
+
+                  <?php if ($termId === null): ?>
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">This term code wasn’t found in the database.</div>
+                  <?php elseif (!$browseRows): ?>
+                    <div class="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">No sections found for this term.</div>
+                  <?php else: ?>
+                    <div class="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                      <table class="min-w-full text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                          <tr>
+                            <th class="px-3 py-2">Course</th>
+                            <th class="px-3 py-2">Section</th>
+                            <th class="px-3 py-2">When / where</th>
+                            <th class="px-3 py-2">Seats</th>
+                            <th class="px-3 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                          <?php foreach ($browseRows as $br): ?>
+                            <?php
+                              $sid = (int)($br['section_id'] ?? 0);
+                              $cap = (int)($br['capacity'] ?? 0);
+                              $ec = (int)($br['enrolled_cnt'] ?? 0);
+                              $open = max(0, $cap - $ec);
+                              $instructor = trim((string)($br['fac_first'] ?? '') . ' ' . (string)($br['fac_last'] ?? ''));
+                            ?>
+                            <tr class="hover:bg-slate-50/70">
+                              <td class="px-3 py-2">
+                                <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($br['course_id'] ?? '')) ?></div>
+                                <div class="text-xs text-slate-600"><?= htmlspecialchars((string)($br['course_name'] ?? '')) ?> · <?= (int)($br['credits'] ?? 0) ?> cr</div>
+                                <?php if ($instructor !== ''): ?><div class="text-[11px] text-slate-500"><?= htmlspecialchars($instructor) ?></div><?php endif; ?>
+                              </td>
+                              <td class="px-3 py-2 font-mono text-xs text-slate-700">#<?= $sid ?></td>
+                              <td class="px-3 py-2 text-xs text-slate-600">
+                                <?= htmlspecialchars(trim((string)($br['meeting_days'] ?? '') . ' ' . (string)($br['meeting_time'] ?? ''))) ?>
+                                <?php if (!empty($br['room'])): ?><span class="text-slate-400"> · </span><?= htmlspecialchars((string)$br['room']) ?><?php endif; ?>
+                              </td>
+                              <td class="px-3 py-2 text-xs text-slate-600">
+                                <span class="font-semibold text-slate-900"><?= (int)$open ?></span><span class="text-slate-400">/</span><?= (int)$cap ?>
+                                <?php if ((int)($br['waitlisted_cnt'] ?? 0) > 0): ?>
+                                  <span class="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">WL <?= (int)$br['waitlisted_cnt'] ?></span>
+                                <?php endif; ?>
+                              </td>
+                              <td class="px-3 py-2 text-right">
+                                <?php if ($canRegister): ?>
+                                  <form method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+                                    <input type="hidden" name="action" value="reg_add" />
+                                    <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
+                                    <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                                    <input type="hidden" name="section_id" value="<?= $sid ?>" />
+                                    <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">Add</button>
+                                  </form>
+                                <?php else: ?>
+                                  <span class="text-xs text-slate-400">—</span>
+                                <?php endif; ?>
+                              </td>
+                            </tr>
+                          <?php endforeach; ?>
+                        </tbody>
+                      </table>
+                    </div>
+                  <?php endif; ?>
+                </div>
+              </div>
             </div>
           <?php endif; ?>
         <?php endif; ?>
       </div>
     </div>
   </main>
+
+  <script>
+    (function () {
+      const html = document.documentElement;
+      const sidebarToggle = document.getElementById('adminSidebarToggle');
+      const sidebar = document.getElementById('adminSidebar');
+      const main = document.getElementById('adminMain');
+      const storageKey = 'admin_nav_collapsed';
+
+      function setCollapsed(collapsed) {
+        if (!sidebarToggle || !sidebar || !main) return;
+        if (collapsed) {
+          html.classList.add('admin-nav-collapsed');
+          sidebarToggle.textContent = 'Show';
+          sidebarToggle.setAttribute('aria-expanded', 'false');
+          sidebarToggle.setAttribute('title', 'Show sidebar');
+        } else {
+          html.classList.remove('admin-nav-collapsed');
+          sidebarToggle.textContent = 'Hide';
+          sidebarToggle.setAttribute('aria-expanded', 'true');
+          sidebarToggle.setAttribute('title', 'Hide sidebar');
+        }
+        try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (e) {}
+      }
+
+      (function initSidebarState() {
+        if (!sidebarToggle || !sidebar || !main) return;
+        let collapsed = false;
+        try { collapsed = localStorage.getItem(storageKey) === '1'; } catch (e) {}
+        setCollapsed(collapsed);
+        sidebarToggle.addEventListener('click', function () {
+          setCollapsed(!html.classList.contains('admin-nav-collapsed'));
+        });
+      })();
+
+      const btn = document.getElementById('adminMenuButton');
+      const closeBtn = document.getElementById('adminMenuClose');
+      const backdrop = document.getElementById('adminMenuBackdrop');
+      const drawer = document.getElementById('adminMenuDrawer');
+      if (!btn || !closeBtn || !backdrop || !drawer) return;
+
+      function openDrawer() {
+        drawer.classList.remove('hidden');
+        backdrop.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+        document.documentElement.classList.add('overflow-hidden');
+      }
+
+      function closeDrawer() {
+        drawer.classList.add('hidden');
+        backdrop.classList.add('hidden');
+        btn.setAttribute('aria-expanded', 'false');
+        document.documentElement.classList.remove('overflow-hidden');
+      }
+
+      btn.addEventListener('click', function () {
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        if (expanded) closeDrawer();
+        else openDrawer();
+      });
+
+      closeBtn.addEventListener('click', closeDrawer);
+      backdrop.addEventListener('click', closeDrawer);
+
+      drawer.addEventListener('click', function (e) {
+        const a = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (a) closeDrawer();
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        closeDrawer();
+      });
+    })();
+  </script>
 </body>
 </html>
