@@ -27,9 +27,9 @@
         <div class="mt-1 text-sm text-slate-300">Search by student_id and view live enrollments.</div>
         <div class="mt-4 text-sm font-semibold text-sky-200">Open →</div>
       </a>
-      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">
-        <div class="text-base font-semibold text-white">Master schedule</div>
-        <div class="mt-1 text-sm text-slate-300">Browse sections by term and department filter.</div>
+      <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="<?= htmlspecialchars(url('/admin.php?view=courses')) ?>">
+        <div class="text-base font-semibold text-white">Course offerings</div>
+        <div class="mt-1 text-sm text-slate-300">Browse sections by term with instructor and enrollment counts.</div>
         <div class="mt-4 text-sm font-semibold text-sky-200">Open →</div>
       </a>
       <a class="rounded-3xl border border-white/10 bg-white/5 p-5 hover:bg-white/10" href="<?= htmlspecialchars(url('/admin/holds')) ?>">

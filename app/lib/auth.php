@@ -91,13 +91,21 @@ function auth_login(string $username, string $password): bool
     auth_start_session();
 
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT id, username, password_hash, role FROM auth_users WHERE username = ? LIMIT 1');
-    $stmt->execute([$username]);
+    try {
+        $stmt = $pdo->prepare('SELECT id, username, password_hash, role, IFNULL(is_active, 1) AS is_active FROM auth_users WHERE username = ? LIMIT 1');
+        $stmt->execute([$username]);
+    } catch (Throwable) {
+        $stmt = $pdo->prepare('SELECT id, username, password_hash, role FROM auth_users WHERE username = ? LIMIT 1');
+        $stmt->execute([$username]);
+    }
     $row = $stmt->fetch();
     if (!$row) {
         return false;
     }
     if (!password_verify($password, $row['password_hash'])) {
+        return false;
+    }
+    if (isset($row['is_active']) && (int)$row['is_active'] === 0) {
         return false;
     }
 

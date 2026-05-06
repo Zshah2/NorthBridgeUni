@@ -1,0 +1,34 @@
+<svg width="400" height="400" viewBox="0 0 400 400" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>NorthBridge University Icon</title>
+  <desc>A modern minimal university icon featuring a stylized bridge with a north star, representing NorthBridge University</desc>
+
+  <!-- Icon square background -->
+  <rect x="0" y="0" width="400" height="400" rx="48" fill="#1A3A5C"/>
+
+  <!-- North star -->
+  <g transform="translate(200, 115)">
+    <polygon points="0,-32 7,-12 28,-12 13,0 20,22 0,10 -20,22 -13,0 -28,-12 -7,-12" fill="#F5C842"/>
+  </g>
+
+  <!-- Bridge arches -->
+  <path d="M80,255 Q110,200 140,255" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M140,255 Q170,200 200,255" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M200,255 Q230,200 260,255" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M260,255 Q290,200 320,255" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Bridge deck -->
+  <rect x="70" y="251" width="260" height="10" rx="3" fill="#FFFFFF"/>
+
+  <!-- Bridge pillars -->
+  <rect x="105" y="261" width="9" height="42" fill="#FFFFFF"/>
+  <rect x="195" y="261" width="9" height="42" fill="#FFFFFF"/>
+  <rect x="286" y="261" width="9" height="42" fill="#FFFFFF"/>
+
+  <!-- Base -->
+  <rect x="70" y="301" width="260" height="9" rx="3" fill="#FFFFFF"/>
+
+  <!-- University name -->
+  <text x="200" y="348" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="600" fill="#FFFFFF" letter-spacing="3">NORTHBRIDGE</text>
+  <text x="200" y="375" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#A8C4D8" letter-spacing="5">UNIVERSITY</text>
+
+</svg>

@@ -6,15 +6,20 @@ return [
         'shortName' => 'Northbridge',
         'tagline' => 'A modern campus for ambitious learners.',
         'description' => 'Northbridge College offers career-focused programs, supportive faculty, and a vibrant campus community.',
-        'themeColor' => '#0ea5e9',
+        'themeColor' => '#0a0f1f',
+    ],
+    'registration' => [
+        // Fallback when a student has no ug_credit_limits row yet.
+        'default_max_credits' => 18,
     ],
     'nav' => [
-        ['label' => 'Programs', 'href' => '#programs'],
+        ['label' => 'Academics', 'href' => '#programs'],
+        ['label' => 'Research', 'href' => '#departments'],
+        ['label' => 'Campus Life', 'href' => '#visit'],
         ['label' => 'Admissions', 'href' => '#admissions'],
-        ['label' => 'Departments', 'href' => '#departments'],
+        ['label' => 'About', 'href' => '#about'],
         ['label' => 'News', 'href' => '#news'],
-        ['label' => 'Contact', 'href' => '#contact'],
-        ['label' => 'Login', 'href' => '/login.php'],
+        ['label' => 'Events', 'href' => '#events'],
     ],
     'cta' => [
         'primary' => ['label' => 'Apply Now', 'href' => '#admissions'],

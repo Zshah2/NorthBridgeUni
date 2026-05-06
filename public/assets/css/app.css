@@ -4,8 +4,9 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Slightly nicer focus ring for keyboard users on dark UI */
+/* Visible, on-brand focus for keyboard users */
 :focus-visible {
-  outline: none;
+  outline: 2px solid #e879f9;
+  outline-offset: 2px;
 }
 

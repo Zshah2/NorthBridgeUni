@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Fill missing users.email (students) and faculty.email (faculty) using
- * last name + first initial @northbridge.edu (unique across both tables).
+ * first initial + last name @northbridge.edu (unique across both tables).
  *
  * Usage: php scripts/backfill_northbridge_emails.php
  */
@@ -38,6 +38,7 @@ $facRows = $pdo->query('
   FROM faculty f
   INNER JOIN users u ON u.user_id = f.faculty_id
   WHERE f.email IS NULL OR TRIM(f.email) = ""
+     OR LOWER(TRIM(f.email)) REGEXP "^faculty[0-9]+@"
 ')->fetchAll(PDO::FETCH_ASSOC);
 
 $m = 0;
@@ -45,8 +46,13 @@ foreach ($facRows as $row) {
     $fid = (int)$row['faculty_id'];
     $email = northbridge_allocate_school_email($pdo, (string)$row['first_name'], (string)$row['last_name'], $fid);
     $fUp->execute([$email, $fid]);
-    $pdo->prepare('UPDATE users SET email = ? WHERE user_id = ? AND (email IS NULL OR TRIM(email) = "")')
-        ->execute([$email, $fid]);
+    $pdo->prepare('
+      UPDATE users SET email = ?
+      WHERE user_id = ? AND (
+        email IS NULL OR TRIM(email) = ""
+        OR LOWER(TRIM(email)) REGEXP "^faculty[0-9]+@"
+      )
+    ')->execute([$email, $fid]);
     $m++;
 }
 fwrite(STDOUT, "Updated faculty.email for {$m} faculty (and users.email when blank).\n");

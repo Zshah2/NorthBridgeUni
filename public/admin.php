@@ -7,6 +7,7 @@ require __DIR__ . '/../app/lib/bootstrap.php';
 bootstrap_app();
 require __DIR__ . '/../app/lib/url.php';
 require __DIR__ . '/../app/lib/db.php';
+require_once __DIR__ . '/../app/lib/admin_term_policy.php';
 require __DIR__ . '/../app/lib/auth.php';
 require __DIR__ . '/../app/lib/csrf.php';
 
@@ -16,6 +17,7 @@ auth_start_session();
 auth_require_portal_user();
 
 $user = (string)($_SESSION['auth']['username'] ?? '');
+$currentAuthId = (int)($_SESSION['auth']['id'] ?? 0);
 $isAdmin = auth_is_admin();
 $isLimited = auth_is_limited();
 $isViewer = auth_is_viewer();
@@ -27,9 +29,14 @@ $canPostGrades = $isAdmin;
 $csrf = csrf_token();
 $pageTitle = 'Administration — Northbridge College';
 $pdo = db();
+$appCfg = (array)config('app');
+$defaultMaxCredits = (int)(($appCfg['registration']['default_max_credits'] ?? 18));
+if ($defaultMaxCredits < 1) {
+    $defaultMaxCredits = 18;
+}
 
 $view = (string)($_GET['view'] ?? 'dashboard');
-$validViews = ['dashboard', 'people', 'schedule', 'enrollment', 'registration'];
+$validViews = ['dashboard', 'people', 'schedule', 'courses', 'course', 'enrollment', 'departments', 'registration', 'reports', 'messages', 'settings', 'catalog', 'terms', 'holds', 'accounts'];
 if (!in_array($view, $validViews, true)) {
     $view = 'dashboard';
 }
@@ -98,7 +105,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         exit;
     }
     if ($isLimited) {
-        $blocked = ['grade_upsert', 'people_scr_upsert'];
+        $blocked = ['grade_upsert', 'people_scr_upsert', 'catalog_course_save', 'catalog_prereqs_save', 'term_registration_save', 'auth_password_reset', 'auth_user_active', 'reg_promote'];
         $act = (string)($_POST['action'] ?? '');
         if (in_array($act, $blocked, true)) {
             header('Location: ' . url('/admin.php?view=' . rawurlencode($view) . '&msg=forbidden'));
@@ -255,29 +262,241 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         $roles = $_POST['declaration_role'] ?? [];
-        if (is_array($roles)) {
-            foreach ($roles as $deptId => $role) {
-                $deptId = trim((string)$deptId);
-                $role = trim((string)$role);
-                if ($deptId === '' || ($role !== 'major' && $role !== 'minor')) {
-                    continue;
-                }
-                $pdo->prepare('UPDATE student_departments SET declaration_role = ? WHERE student_id = ? AND dept_id = ?')->execute([$role, $sid, $deptId]);
-            }
-        }
-
         $addDept = trim((string)($_POST['add_declaration_dept'] ?? ''));
         $addRole = trim((string)($_POST['add_declaration_role'] ?? ''));
-        if ($addDept !== '' && ($addRole === 'major' || $addRole === 'minor')) {
-            $dchk = $pdo->prepare('SELECT 1 FROM departments WHERE dept_id = ? LIMIT 1');
-            $dchk->execute([$addDept]);
-            if ($dchk->fetchColumn()) {
-                $ex = $pdo->prepare('SELECT 1 FROM student_departments WHERE student_id = ? AND dept_id = ? LIMIT 1');
-                $ex->execute([$sid, $addDept]);
-                if (!$ex->fetchColumn()) {
-                    $pdo->prepare('INSERT INTO student_departments (student_id, dept_id, declaration_role, date_of_declaration) VALUES (?, ?, ?, CURDATE())')->execute([$sid, $addDept, $addRole]);
+        $addRole = ($addRole === 'major' || $addRole === 'minor') ? $addRole : '';
+        $removeMajor = !empty($_POST['remove_major']);
+        $removeMinor = !empty($_POST['remove_minor']);
+        $overrideDeclApproval = $isAdmin && !empty($_POST['override_decl_approval']);
+        $overrideMajorLimit = $isAdmin && !empty($_POST['override_major_limit']);
+        $overrideFinalSemester = $isAdmin && !empty($_POST['override_final_semester']);
+        $overrideGpa = $isAdmin && !empty($_POST['override_gpa']);
+
+        $pdo->beginTransaction();
+        try {
+            $existing = [];
+            $st = $pdo->prepare('SELECT dept_id, declaration_role FROM student_departments WHERE student_id = ?');
+            $st->execute([$sid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $did = trim((string)($r['dept_id'] ?? ''));
+                if ($did === '') {
+                    continue;
+                }
+                $role = trim((string)($r['declaration_role'] ?? 'major'));
+                $existing[$did] = ($role === 'minor') ? 'minor' : 'major';
+            }
+
+            $final = $existing;
+
+            $oldMajorDept = null;
+            $oldMinorDept = null;
+            foreach ($existing as $did => $r) {
+                if ($r === 'major') {
+                    $oldMajorDept = $did;
+                } elseif ($r === 'minor') {
+                    $oldMinorDept = $did;
                 }
             }
+
+            if (is_array($roles)) {
+                foreach ($roles as $deptId => $role) {
+                    $deptId = trim((string)$deptId);
+                    $role = trim((string)$role);
+                    if ($deptId === '' || ($role !== 'major' && $role !== 'minor')) {
+                        continue;
+                    }
+                    if (!array_key_exists($deptId, $final)) {
+                        continue;
+                    }
+                    $final[$deptId] = $role;
+                }
+            }
+
+            if ($removeMajor && $oldMajorDept !== null) {
+                unset($final[$oldMajorDept]);
+            }
+            if ($removeMinor && $oldMinorDept !== null) {
+                unset($final[$oldMinorDept]);
+            }
+
+            $pendingInsert = null;
+            if ($addDept !== '' && $addRole !== '') {
+                $dchk = $pdo->prepare('SELECT 1 FROM departments WHERE dept_id = ? LIMIT 1');
+                $dchk->execute([$addDept]);
+                if ($dchk->fetchColumn() && !array_key_exists($addDept, $final)) {
+                    $final[$addDept] = $addRole;
+                    $pendingInsert = [$addDept, $addRole];
+                }
+            }
+
+            $newMajorDept = null;
+            $newMinorDept = null;
+            foreach ($final as $did => $r) {
+                if ($r === 'major') {
+                    $newMajorDept = $did;
+                } elseif ($r === 'minor') {
+                    $newMinorDept = $did;
+                }
+            }
+
+            $majorChanged = $oldMajorDept !== $newMajorDept;
+            $minorChanged = $oldMinorDept !== $newMinorDept;
+
+            if (($majorChanged || $minorChanged) && !$isAdmin && !$overrideDeclApproval) {
+                $pdo->rollBack();
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=forbidden'));
+                exit;
+            }
+
+            if ($newMajorDept !== null && $newMinorDept !== null && $newMajorDept === $newMinorDept) {
+                $pdo->rollBack();
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_conflict'));
+                exit;
+            }
+
+            if ($majorChanged && $newMajorDept !== null && $oldMinorDept !== null && $newMajorDept === $oldMinorDept) {
+                $pdo->rollBack();
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_same_as_other'));
+                exit;
+            }
+            if ($minorChanged && $newMinorDept !== null && $oldMajorDept !== null && $newMinorDept === $oldMajorDept) {
+                $pdo->rollBack();
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_same_as_other'));
+                exit;
+            }
+
+            if (($majorChanged || $minorChanged) && !$overrideFinalSemester) {
+                try {
+                    $ay = $pdo->prepare('SELECT academic_year_level FROM undergrad_students WHERE student_id = ? LIMIT 1');
+                    $ay->execute([$sid]);
+                    $lvl = trim((string)($ay->fetchColumn() ?: ''));
+                    if (strcasecmp($lvl, 'Senior') === 0) {
+                        $pdo->rollBack();
+                        header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_final_sem'));
+                        exit;
+                    }
+                } catch (Throwable) {
+                }
+            }
+
+            if ($majorChanged && $newMajorDept !== null && !$overrideGpa) {
+                try {
+                    $gpaStmt = $pdo->prepare('
+                      SELECT
+                        COALESCE(SUM(grade_points * credits_earned), 0) AS quality,
+                        COALESCE(SUM(CASE WHEN credits_earned > 0 THEN credits_earned ELSE 0 END), 0) AS cr
+                      FROM student_course_results
+                      WHERE student_id = ?
+                    ');
+                    $gpaStmt->execute([$sid]);
+                    $gpaRow = $gpaStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $qc = isset($gpaRow['quality']) ? (float)$gpaRow['quality'] : 0.0;
+                    $credSum = isset($gpaRow['cr']) ? (float)$gpaRow['cr'] : 0.0;
+                    $gpa = ($credSum > 0.0) ? round($qc / $credSum, 2) : null;
+                    if ($gpa !== null && $gpa < 2.0) {
+                        $pdo->rollBack();
+                        header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_gpa'));
+                        exit;
+                    }
+                } catch (Throwable) {
+                }
+            }
+
+            if ($majorChanged && !$overrideMajorLimit) {
+                try {
+                    $cs = $pdo->prepare('SELECT major_change_count FROM student_major_change_stats WHERE student_id = ? LIMIT 1');
+                    $cs->execute([$sid]);
+                    $cnt = $cs->fetchColumn();
+                    $curCnt = ($cnt !== false && $cnt !== null && is_numeric($cnt)) ? (int)$cnt : 0;
+                    if ($curCnt >= 3) {
+                        $pdo->rollBack();
+                        header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_limit3'));
+                        exit;
+                    }
+                } catch (Throwable) {
+                }
+            }
+
+            $maj = 0;
+            $min = 0;
+            foreach ($final as $r) {
+                if ($r === 'major') {
+                    $maj++;
+                } elseif ($r === 'minor') {
+                    $min++;
+                }
+            }
+            if ($maj > 1 || $min > 1) {
+                $pdo->rollBack();
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_limit'));
+                exit;
+            }
+
+            if ($final !== $existing) {
+                $upd = $pdo->prepare('UPDATE student_departments SET declaration_role = ? WHERE student_id = ? AND dept_id = ?');
+                foreach ($final as $deptId => $role) {
+                    if (!array_key_exists($deptId, $existing)) {
+                        continue;
+                    }
+                    if ($existing[$deptId] !== $role) {
+                        $upd->execute([$role, $sid, $deptId]);
+                    }
+                }
+            }
+            if ($pendingInsert) {
+                [$did, $role] = $pendingInsert;
+                $pdo->prepare('INSERT INTO student_departments (student_id, dept_id, declaration_role, date_of_declaration) VALUES (?, ?, ?, CURDATE())')->execute([$sid, $did, $role]);
+            }
+
+            if ($removeMajor && $oldMajorDept !== null) {
+                $pdo->prepare('DELETE FROM student_departments WHERE student_id = ? AND dept_id = ?')->execute([$sid, $oldMajorDept]);
+            }
+            if ($removeMinor && $oldMinorDept !== null) {
+                $pdo->prepare('DELETE FROM student_departments WHERE student_id = ? AND dept_id = ?')->execute([$sid, $oldMinorDept]);
+            }
+
+            if ($majorChanged) {
+                try {
+                    $pdo->prepare('
+                      INSERT INTO student_declaration_change_log (student_id, change_kind, old_dept_id, new_dept_id, actor_kind, actor_auth_id, note)
+                      VALUES (?, "major", ?, ?, "admin", ?, ?)
+                    ')->execute([$sid, $oldMajorDept, $newMajorDept, (int)($_SESSION['auth']['id'] ?? 0), $overrideMajorLimit ? 'override_limit' : null]);
+                } catch (Throwable) {
+                }
+                try {
+                    $pdo->prepare('
+                      INSERT INTO student_major_change_stats (student_id, major_change_count, last_changed_at)
+                      VALUES (?, 1, CURRENT_TIMESTAMP)
+                      ON DUPLICATE KEY UPDATE major_change_count = major_change_count + 1, last_changed_at = CURRENT_TIMESTAMP
+                    ')->execute([$sid]);
+                } catch (Throwable) {
+                }
+            }
+            if ($minorChanged) {
+                try {
+                    $pdo->prepare('
+                      INSERT INTO student_declaration_change_log (student_id, change_kind, old_dept_id, new_dept_id, actor_kind, actor_auth_id)
+                      VALUES (?, "minor", ?, ?, "admin", ?)
+                    ')->execute([$sid, $oldMinorDept, $newMinorDept, (int)($_SESSION['auth']['id'] ?? 0)]);
+                } catch (Throwable) {
+                }
+            }
+
+            $pdo->commit();
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if ((string)$e->getCode() === '23000') {
+                header('Location: ' . url('/admin.php?view=people&id=' . $redirectId . '&people_panel=info&msg=decl_limit'));
+                exit;
+            }
+            throw $e;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
         }
 
         if ($isAdmin) {
@@ -483,10 +702,171 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         exit;
     }
 
+    if ($action === 'catalog_course_save' && $isAdmin) {
+        $cid = strtoupper(trim((string)($_POST['course_id'] ?? '')));
+        $name = trim((string)($_POST['course_name'] ?? ''));
+        $credits = isset($_POST['credits']) && is_numeric((string)$_POST['credits']) ? (int)$_POST['credits'] : null;
+        $deptRaw = trim((string)($_POST['dept_id'] ?? ''));
+        $deptId = $deptRaw === '' ? null : $deptRaw;
+        $desc = trim((string)($_POST['description'] ?? ''));
+        $isActive = isset($_POST['is_active']) ? 1 : 0;
+        if ($cid === '' || $name === '' || $credits === null || $credits < 0) {
+            header('Location: ' . url('/admin.php?view=catalog&msg=catalog_invalid'));
+            exit;
+        }
+        if ($deptId !== null) {
+            $dchk = $pdo->prepare('SELECT 1 FROM departments WHERE dept_id = ? LIMIT 1');
+            $dchk->execute([$deptId]);
+            if (!$dchk->fetchColumn()) {
+                $deptId = null;
+            }
+        }
+        try {
+            $pdo->prepare('
+              INSERT INTO courses (course_id, course_name, credits, dept_id, description, is_active)
+              VALUES (?,?,?,?,?,?)
+              ON DUPLICATE KEY UPDATE
+                course_name = VALUES(course_name),
+                credits = VALUES(credits),
+                dept_id = VALUES(dept_id),
+                description = VALUES(description),
+                is_active = VALUES(is_active)
+            ')->execute([$cid, $name, $credits, $deptId, $desc !== '' ? $desc : null, $isActive]);
+        } catch (Throwable) {
+            $pdo->prepare('
+              INSERT INTO courses (course_id, course_name, credits, dept_id)
+              VALUES (?,?,?,?)
+              ON DUPLICATE KEY UPDATE course_name = VALUES(course_name), credits = VALUES(credits), dept_id = VALUES(dept_id)
+            ')->execute([$cid, $name, $credits, $deptId]);
+        }
+        admin_audit($pdo, 'catalog_course_save', $cid);
+        header('Location: ' . url('/admin.php?view=catalog&edit=' . rawurlencode($cid) . '&msg=course_saved'));
+        exit;
+    }
+
+    if ($action === 'catalog_prereqs_save' && $isAdmin) {
+        $cid = strtoupper(trim((string)($_POST['course_id'] ?? '')));
+        $ids = $_POST['prereq_ids'] ?? [];
+        if (!is_array($ids)) {
+            $ids = [];
+        }
+        if ($cid === '') {
+            header('Location: ' . url('/admin.php?view=catalog&msg=catalog_invalid'));
+            exit;
+        }
+        $pdo->prepare('DELETE FROM course_prereqs WHERE course_id = ?')->execute([$cid]);
+        $ins = $pdo->prepare('INSERT INTO course_prereqs (course_id, prereq_course_id) VALUES (?, ?)');
+        foreach ($ids as $p) {
+            $p = strtoupper(trim((string)$p));
+            if ($p !== '' && $p !== $cid) {
+                try {
+                    $ins->execute([$cid, $p]);
+                } catch (Throwable) {
+                }
+            }
+        }
+        admin_audit($pdo, 'catalog_prereqs_save', $cid);
+        header('Location: ' . url('/admin.php?view=catalog&edit=' . rawurlencode($cid) . '&msg=prereqs_saved'));
+        exit;
+    }
+
+    if ($action === 'term_registration_save' && $isAdmin) {
+        $tid = isset($_POST['term_id']) && ctype_digit((string)$_POST['term_id']) ? (int)$_POST['term_id'] : null;
+        if ($tid === null) {
+            header('Location: ' . url('/admin.php?view=terms&msg=invalid'));
+            exit;
+        }
+        $open = isset($_POST['registration_open']) ? 1 : 0;
+        $rs = trim((string)($_POST['registration_start'] ?? ''));
+        $re = trim((string)($_POST['registration_end'] ?? ''));
+        $rs = $rs === '' ? null : $rs;
+        $re = $re === '' ? null : $re;
+        try {
+            $pdo->prepare('UPDATE terms SET registration_open = ?, registration_start = ?, registration_end = ? WHERE term_id = ?')->execute([$open, $rs, $re, $tid]);
+        } catch (Throwable) {
+            header('Location: ' . url('/admin.php?view=terms&msg=term_save_failed'));
+            exit;
+        }
+        admin_audit($pdo, 'term_registration_save', 'term_id=' . $tid);
+        header('Location: ' . url('/admin.php?view=terms&msg=term_saved'));
+        exit;
+    }
+
+    if ($action === 'auth_password_reset' && $isAdmin) {
+        $aid = isset($_POST['auth_id']) && ctype_digit((string)$_POST['auth_id']) ? (int)$_POST['auth_id'] : null;
+        $pw = (string)($_POST['new_password'] ?? '');
+        if ($aid === null || strlen($pw) < 8) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=pwd_invalid'));
+            exit;
+        }
+        $hash = password_hash($pw, PASSWORD_DEFAULT);
+        $pdo->prepare('UPDATE auth_users SET password_hash = ? WHERE id = ?')->execute([$hash, $aid]);
+        admin_audit($pdo, 'auth_password_reset', 'id=' . $aid);
+        header('Location: ' . url('/admin.php?view=accounts&msg=pwd_reset'));
+        exit;
+    }
+
+    if ($action === 'auth_user_active' && $isAdmin) {
+        $aid = isset($_POST['auth_id']) && ctype_digit((string)$_POST['auth_id']) ? (int)$_POST['auth_id'] : null;
+        $wantActive = isset($_POST['is_active']) && (string)$_POST['is_active'] === '1' ? 1 : 0;
+        $sessionAuthId = (int)($_SESSION['auth']['id'] ?? 0);
+        if ($aid === null || $aid < 1) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=invalid'));
+            exit;
+        }
+        if ($aid === $sessionAuthId) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=self_not_allowed'));
+            exit;
+        }
+        try {
+            $pdo->prepare('UPDATE auth_users SET is_active = ? WHERE id = ?')->execute([$wantActive, $aid]);
+        } catch (Throwable) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=active_failed'));
+            exit;
+        }
+        admin_audit($pdo, 'auth_user_active', 'id=' . $aid . ';active=' . $wantActive);
+        header('Location: ' . url('/admin.php?view=accounts&msg=active_saved'));
+        exit;
+    }
+
+    if ($action === 'reg_promote' && $canRegister && $isAdmin) {
+        $studentId = isset($_POST['student_id']) && ctype_digit((string)$_POST['student_id']) ? (int)$_POST['student_id'] : null;
+        $sectionId = isset($_POST['section_id']) && ctype_digit((string)$_POST['section_id']) ? (int)$_POST['section_id'] : null;
+        $termCode = trim((string)($_POST['term'] ?? ''));
+        if ($studentId === null || $sectionId === null) {
+            header('Location: ' . url('/admin.php?view=registration&msg=invalid'));
+            exit;
+        }
+        $stChk = $pdo->prepare('SELECT status FROM enrollments WHERE student_id = ? AND section_id = ? LIMIT 1');
+        $stChk->execute([$studentId, $sectionId]);
+        $curSt = (string)($stChk->fetchColumn() ?: '');
+        if ($curSt !== 'waitlisted') {
+            header('Location: ' . url('/admin.php?view=registration&student_id=' . $studentId . '&term=' . rawurlencode($termCode) . '&msg=promote_bad'));
+            exit;
+        }
+        $cnt = $pdo->prepare('SELECT COUNT(*) FROM enrollments WHERE section_id = ? AND status = "enrolled"');
+        $cnt->execute([$sectionId]);
+        $enrolled = (int)$cnt->fetchColumn();
+        $capStmt = $pdo->prepare('SELECT capacity FROM sections WHERE section_id = ?');
+        $capStmt->execute([$sectionId]);
+        $cap = (int)$capStmt->fetchColumn();
+        if ($enrolled >= $cap) {
+            header('Location: ' . url('/admin.php?view=registration&student_id=' . $studentId . '&term=' . rawurlencode($termCode) . '&msg=promote_full'));
+            exit;
+        }
+        $pdo->prepare('UPDATE enrollments SET status = "enrolled" WHERE student_id = ? AND section_id = ? AND status = "waitlisted"')->execute([$studentId, $sectionId]);
+        admin_audit($pdo, 'reg_promote', 'student=' . $studentId . ';section=' . $sectionId);
+        header('Location: ' . url('/admin.php?view=registration&student_id=' . $studentId . '&term=' . rawurlencode($termCode) . '&msg=promote_ok'));
+        exit;
+    }
+
     if ($action === 'reg_add' && $canRegister) {
         $studentId = isset($_POST['student_id']) && ctype_digit((string)$_POST['student_id']) ? (int)$_POST['student_id'] : null;
         $sectionId = isset($_POST['section_id']) && ctype_digit((string)$_POST['section_id']) ? (int)$_POST['section_id'] : null;
         $termCode = trim((string)($_POST['term'] ?? ''));
+        $overrideRegClosed = $isAdmin && !empty($_POST['override_reg_closed']);
+        $overridePrereq = $isAdmin && !empty($_POST['override_prereq']);
+        $overrideCredit = $isAdmin && !empty($_POST['override_credit']);
         if ($studentId === null || $sectionId === null || $termCode === '') {
             header('Location: ' . url('/admin.php?view=registration&msg=invalid'));
             exit;
@@ -513,6 +893,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $termId = (int)$section['term_id'];
         $courseId = (string)$section['course_id'];
         $credits = (int)$section['credits'];
+
+        if (!admin_term_registration_allowed($pdo, $termId) && !$overrideRegClosed) {
+            header('Location: ' . url('/admin.php?view=registration&student_id=' . $studentId . '&term=' . rawurlencode($termCode) . '&msg=regclosed'));
+            exit;
+        }
 
         $dup = $pdo->prepare('SELECT 1 FROM enrollments WHERE student_id = ? AND section_id = ? AND status IN ("enrolled","waitlisted") LIMIT 1');
         $dup->execute([$studentId, $sectionId]);
@@ -543,7 +928,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
         }
 
-        $maxCredits = 18;
+        $maxCredits = $defaultMaxCredits;
         try {
             $mx = $pdo->prepare('SELECT max_credit FROM ug_credit_limits WHERE student_id = ? LIMIT 1');
             $mx->execute([$studentId]);
@@ -561,7 +946,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         ');
         $cur->execute([$studentId, $termId]);
         $currentCredits = (int)$cur->fetchColumn();
-        if ($currentCredits + $credits > $maxCredits) {
+        if (!$overrideCredit && $currentCredits + $credits > $maxCredits) {
             header('Location: ' . url('/admin.php?view=registration&student_id=' . $studentId . '&term=' . rawurlencode($termCode) . '&msg=credit'));
             exit;
         }
@@ -570,7 +955,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $pre = $pdo->prepare('SELECT prereq_course_id FROM course_prereqs WHERE course_id = ?');
             $pre->execute([$courseId]);
             $prereqs = $pre->fetchAll(PDO::FETCH_COLUMN);
-            if ($prereqs) {
+            if (!$overridePrereq && $prereqs) {
                 $in = implode(',', array_fill(0, count($prereqs), '?'));
                 $stmt = $pdo->prepare("SELECT DISTINCT course_id FROM student_course_results WHERE student_id = ? AND course_id IN ($in) AND grade_points > 0");
                 $stmt->execute(array_merge([$studentId], $prereqs));
@@ -628,7 +1013,55 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     exit;
 }
 
-$counts = ['students' => 0, 'faculty' => 0, 'holds_active' => 0];
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $view === 'reports' && ($_GET['export'] ?? '') === 'enrollment_summary' && $isAdmin) {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="enrollment_summary.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['course_id', 'course_name', 'section_id', 'term_code', 'enrolled', 'capacity', 'waitlisted']);
+    if ($currentTermId !== null) {
+        try {
+            $q = $pdo->prepare('
+              SELECT
+                c.course_id,
+                c.course_name,
+                s.section_id,
+                t.code AS term_code,
+                s.capacity,
+                (SELECT COUNT(*) FROM enrollments e WHERE e.section_id = s.section_id AND e.status = "enrolled") AS enrolled_cnt,
+                (SELECT COUNT(*) FROM enrollments e WHERE e.section_id = s.section_id AND e.status = "waitlisted") AS waitlisted_cnt
+              FROM sections s
+              INNER JOIN courses c ON c.course_id = s.course_id
+              INNER JOIN terms t ON t.term_id = s.term_id
+              WHERE s.term_id = ?
+              ORDER BY c.course_id, s.section_id
+            ');
+            $q->execute([$currentTermId]);
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                fputcsv($out, [
+                    (string)$row['course_id'],
+                    (string)$row['course_name'],
+                    (string)$row['section_id'],
+                    (string)$row['term_code'],
+                    (string)$row['enrolled_cnt'],
+                    (string)$row['capacity'],
+                    (string)$row['waitlisted_cnt'],
+                ]);
+            }
+        } catch (Throwable) {
+        }
+    }
+    fclose($out);
+    exit;
+}
+
+$counts = [
+    'students' => 0,
+    'faculty' => 0,
+    'holds_active' => 0,
+    'courses_catalog' => 0,
+    'courses_active_term' => 0,
+    'departments' => 0,
+];
 $dash = [
     'students_missing_email' => 0,
     'students_missing_phone' => 0,
@@ -640,6 +1073,15 @@ $dash = [
     'term_open_seats' => 0,
     'top_enrolled' => [],
     'top_waitlisted' => [],
+    'recent_enrollments' => [],
+    'audit_recent' => [],
+    'chart_month_labels' => [],
+    'chart_month_values' => [],
+    'chart_dept_labels' => [],
+    'chart_dept_values' => [],
+    'chart_status_labels' => [],
+    'chart_status_values' => [],
+    'chart_status_colors' => [],
 ];
 try {
     $counts['students'] = (int)$pdo->query('SELECT COUNT(*) FROM students')->fetchColumn();
@@ -770,7 +1212,122 @@ try {
         $topWl->execute([$currentTermId]);
         $dash['top_waitlisted'] = $topWl->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
+
+    $counts['courses_catalog'] = (int)$pdo->query('SELECT COUNT(*) FROM courses')->fetchColumn();
+    $counts['departments'] = (int)$pdo->query('SELECT COUNT(*) FROM departments')->fetchColumn();
+    if ($currentTermId !== null) {
+        $distinctCourses = $pdo->prepare('SELECT COUNT(DISTINCT course_id) FROM sections WHERE term_id = ?');
+        $distinctCourses->execute([$currentTermId]);
+        $counts['courses_active_term'] = (int)$distinctCourses->fetchColumn();
+    }
+
+    $recentStmt = $pdo->query('
+      SELECT e.created_at, e.status, e.student_id,
+        u.first_name, u.last_name,
+        c.course_id, c.course_name
+      FROM enrollments e
+      INNER JOIN sections s ON s.section_id = e.section_id
+      INNER JOIN courses c ON c.course_id = s.course_id
+      INNER JOIN users u ON u.user_id = e.student_id
+      ORDER BY e.created_at DESC
+      LIMIT 15
+    ');
+    $dash['recent_enrollments'] = $recentStmt ? ($recentStmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+
+    $auditStmt = $pdo->query('
+      SELECT a.action, a.details, a.created_at,
+        COALESCE(u.username, CONCAT("#", a.admin_auth_id)) AS actor
+      FROM admin_audit_log a
+      LEFT JOIN auth_users u ON u.id = a.admin_auth_id
+      ORDER BY a.created_at DESC
+      LIMIT 18
+    ');
+    $dash['audit_recent'] = $auditStmt ? ($auditStmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+
+    $monthMap = [];
+    $monthRows = $pdo->query("
+      SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, COUNT(*) AS cnt
+      FROM enrollments
+      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH)
+      GROUP BY ym ORDER BY ym
+    ");
+    if ($monthRows) {
+        foreach ($monthRows->fetchAll(PDO::FETCH_ASSOC) as $mr) {
+            $monthMap[(string)$mr['ym']] = (int)$mr['cnt'];
+        }
+    }
+    $dash['chart_month_labels'] = [];
+    $dash['chart_month_values'] = [];
+    for ($mi = 11; $mi >= 0; $mi--) {
+        $d = (new DateTimeImmutable('first day of this month'))->modify('-' . $mi . ' months');
+        $key = $d->format('Y-m');
+        $dash['chart_month_labels'][] = $d->format('M Y');
+        $dash['chart_month_values'][] = (int)($monthMap[$key] ?? 0);
+    }
+
+    $dash['chart_dept_labels'] = [];
+    $dash['chart_dept_values'] = [];
+    try {
+        $deptStmt = $pdo->query('
+          SELECT d.dept_name, COUNT(DISTINCT sd.student_id) AS cnt
+          FROM student_departments sd
+          INNER JOIN departments d ON d.dept_id = sd.dept_id
+          GROUP BY d.dept_id, d.dept_name
+          ORDER BY cnt DESC
+          LIMIT 10
+        ');
+        if ($deptStmt) {
+            foreach ($deptStmt->fetchAll(PDO::FETCH_ASSOC) as $dr) {
+                $dash['chart_dept_labels'][] = (string)$dr['dept_name'];
+                $dash['chart_dept_values'][] = (int)$dr['cnt'];
+            }
+        }
+    } catch (Throwable) {
+    }
+
+    $dash['chart_status_labels'] = [];
+    $dash['chart_status_values'] = [];
+    $dash['chart_status_colors'] = [];
+    if ($currentTermId !== null) {
+        $stChart = $pdo->prepare('
+          SELECT e.status, COUNT(*) AS cnt
+          FROM enrollments e
+          INNER JOIN sections s ON s.section_id = e.section_id
+          WHERE s.term_id = ?
+          GROUP BY e.status
+        ');
+        $stChart->execute([$currentTermId]);
+        $palette = ['enrolled' => '#4f46e5', 'waitlisted' => '#f59e0b', 'dropped' => '#94a3b8'];
+        foreach ($stChart->fetchAll(PDO::FETCH_ASSOC) as $sr) {
+            $st = (string)$sr['status'];
+            $dash['chart_status_labels'][] = ucfirst($st);
+            $dash['chart_status_values'][] = (int)$sr['cnt'];
+            $dash['chart_status_colors'][] = $palette[$st] ?? '#64748b';
+        }
+    }
 } catch (Throwable) {
+}
+
+$adminNotificationCount = (int)($dash['students_missing_email'] ?? 0)
+    + (int)($dash['faculty_missing_email'] ?? 0)
+    + (int)($dash['students_missing_phone'] ?? 0)
+    + (int)($dash['faculty_missing_phone'] ?? 0)
+    + (int)($counts['holds_active'] ?? 0);
+$adminUserInitials = '';
+{
+    $u = trim($user);
+    if ($u === '') {
+        $adminUserInitials = 'NA';
+    } elseif (str_contains($u, '@')) {
+        $local = strstr($u, '@', true) ?: $u;
+        $clean = preg_replace('/[^a-z]/i', '', $local) ?: $local;
+        $adminUserInitials = strtoupper(substr($clean, 0, 2));
+    } else {
+        $parts = preg_split('/\s+/', $u);
+        $adminUserInitials = count($parts) >= 2
+            ? strtoupper(substr($parts[0], 0, 1) . substr($parts[1], 0, 1))
+            : strtoupper(substr($u, 0, 2));
+    }
 }
 
 function admin_people_hold_presets(): array
@@ -853,6 +1410,16 @@ function admin_grade_points_from_letter(string $letter): ?float
     return array_key_exists($l, $map) ? $map[$l] : null;
 }
 
+function admin_enrollment_badge_classes(string $status): string
+{
+    return match (strtolower(trim($status))) {
+        'enrolled' => 'bg-emerald-100 text-emerald-900 ring-emerald-200',
+        'waitlisted' => 'bg-amber-100 text-amber-900 ring-amber-200',
+        'dropped' => 'bg-slate-100 text-slate-700 ring-slate-200',
+        default => 'bg-slate-100 text-slate-800 ring-slate-200',
+    };
+}
+
 function nav_item(string $href, string $label, bool $active): string
 {
     $cls = $active
@@ -860,6 +1427,12 @@ function nav_item(string $href, string $label, bool $active): string
         : 'block rounded-xl px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100';
 
     return '<a class="' . $cls . '" href="' . htmlspecialchars($href) . '">' . htmlspecialchars($label) . '</a>';
+}
+
+/** Non-clickable sidebar subsection title (separates directory vs courses, etc.). */
+function nav_group_label(string $label): string
+{
+    return '<div class="pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">' . htmlspecialchars($label) . '</div>';
 }
 
 ?>
@@ -887,48 +1460,94 @@ function nav_item(string $href, string $label, bool $active): string
   </style>
 </head>
 <body class="min-h-full bg-slate-50 font-sans text-slate-900 antialiased">
-  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
-    <div class="mx-auto flex max-w-[min(100vw-2rem,110rem)] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-      <div class="flex items-center gap-3">
-        <span class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white">NB</span>
-        <div>
-          <div class="text-sm font-semibold text-slate-900">Northbridge Admin</div>
-          <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span><?= htmlspecialchars($user) ?></span>
-            <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700"><?= htmlspecialchars($roleLabel) ?></span>
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto max-w-[min(100vw-2rem,110rem)] px-3 py-3 sm:px-5">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+        <div class="flex min-w-0 flex-1 items-center justify-between gap-3 lg:justify-start lg:gap-4">
+          <a href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>" class="flex min-w-0 items-center gap-3">
+            <img
+              src="<?= htmlspecialchars(url('/assets/img/northbridge_university_icon.svg')) ?>"
+              alt=""
+              width="40"
+              height="40"
+              class="h-10 w-10 shrink-0 rounded-xl ring-1 ring-slate-200"
+            />
+            <div class="min-w-0">
+              <div class="truncate text-sm font-semibold text-slate-900">Northbridge Admin</div>
+              <div class="text-[11px] text-slate-500">Staff dashboard</div>
+            </div>
+          </a>
+          <div class="flex items-center gap-2 lg:hidden">
+            <button
+              type="button"
+              id="adminMenuButton"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-haspopup="dialog"
+              aria-controls="adminMenuDrawer"
+              aria-expanded="false"
+              title="Menu"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5">
+                <path fill="currentColor" d="M4 6.5h16a1 1 0 0 0 0-2H4a1 1 0 0 0 0 2Zm16 5.5H4a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2Zm0 7H4a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2Z"/>
+              </svg>
+              <span class="sr-only">Open menu</span>
+            </button>
           </div>
         </div>
-      </div>
-      <div class="flex items-center gap-3">
-        <button
-          type="button"
-          id="adminSidebarToggle"
-          class="hidden rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:inline-flex"
-          aria-controls="adminSidebar"
-          aria-expanded="true"
-          title="Hide sidebar"
-        >
-          Hide
-        </button>
-        <button
-          type="button"
-          id="adminMenuButton"
-          class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:hidden"
-          aria-haspopup="dialog"
-          aria-controls="adminMenuDrawer"
-          aria-expanded="false"
-          title="Menu"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5">
-            <path fill="currentColor" d="M4 6.5h16a1 1 0 0 0 0-2H4a1 1 0 0 0 0 2Zm16 5.5H4a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2Zm0 7H4a1 1 0 0 0 0 2h16a1 1 0 0 0 0-2Z"/>
-          </svg>
-          <span class="sr-only">Open menu</span>
-        </button>
-        <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm text-slate-600 hover:text-slate-900">Site home</a>
-        <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>">
-          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-          <button type="submit" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Log out</button>
+
+        <form method="get" action="<?= htmlspecialchars(url('/admin.php')) ?>" class="flex w-full flex-1 items-center gap-2 lg:max-w-xl">
+          <input type="hidden" name="view" value="schedule" />
+          <label class="sr-only" for="admin-global-search">Search schedule and directory</label>
+          <input
+            id="admin-global-search"
+            type="search"
+            name="q"
+            placeholder="Search people, courses, email…"
+            class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+            autocomplete="off"
+          />
+          <button type="submit" class="shrink-0 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Search</button>
         </form>
+
+        <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <a
+            href="<?= htmlspecialchars(url('/admin.php?view=dashboard#admin-alerts')) ?>"
+            class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+            title="Alerts and items needing attention"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11c0-3.07-1.64-5.64-4.5-6.32V4a1.5 1.5 0 00-3 0v.68C7.64 5.36 6 7.92 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <?php if ($adminNotificationCount > 0): ?>
+              <span class="absolute -right-1 -top-1 grid min-h-[1.25rem] min-w-[1.25rem] place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white"><?= $adminNotificationCount > 99 ? '99+' : (int)$adminNotificationCount ?></span>
+            <?php endif; ?>
+          </a>
+
+          <div class="flex max-w-[14rem] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2 py-1.5">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-600 to-sky-600 text-xs font-bold text-white"><?= htmlspecialchars($adminUserInitials) ?></span>
+            <div class="min-w-0">
+              <div class="truncate text-xs font-semibold text-slate-900"><?= htmlspecialchars($user !== '' ? $user : 'Admin') ?></div>
+              <div class="truncate text-[10px] text-slate-500"><?= htmlspecialchars($roleLabel) ?></div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="adminSidebarToggle"
+            class="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:inline-flex"
+            aria-controls="adminSidebar"
+            aria-expanded="true"
+            title="Hide sidebar"
+          >
+            Hide
+          </button>
+
+          <a href="<?= htmlspecialchars(url('/')) ?>" class="hidden text-sm font-medium text-slate-600 hover:text-slate-900 sm:inline">Site home</a>
+          <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="inline">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+            <button type="submit" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Log out</button>
+          </form>
+        </div>
       </div>
     </div>
   </header>
@@ -949,11 +1568,33 @@ function nav_item(string $href, string $label, bool $active): string
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
         <nav class="mt-4 space-y-1 text-sm">
           <?= nav_item(url('/admin.php?view=dashboard'), 'Dashboard', $view === 'dashboard') ?>
-          <?= nav_item(url('/admin.php?view=people'), 'ID lookup', $view === 'people') ?>
+          <?= nav_group_label('People & directory') ?>
+          <?= nav_item(url('/admin.php?view=people'), 'People', $view === 'people') ?>
           <?= nav_item(url('/admin.php?view=schedule'), 'Master schedule', $view === 'schedule') ?>
-          <?= nav_item(url('/admin.php?view=enrollment'), 'Directory', $view === 'enrollment') ?>
+          <?= nav_group_label('Scheduling & enrollment') ?>
+          <?= nav_item(url('/admin.php?view=courses'), 'Courses', $view === 'courses' || $view === 'course') ?>
+          <?= nav_item(url('/admin.php?view=enrollment'), 'Enrollment', $view === 'enrollment') ?>
+          <?= nav_item(url('/admin.php?view=departments'), 'Departments', $view === 'departments') ?>
           <?= nav_item(url('/admin.php?view=registration'), 'Registration', $view === 'registration') ?>
+          <?php if ($isAdmin): ?>
+            <?= nav_group_label('Catalog & records') ?>
+            <?= nav_item(url('/admin.php?view=catalog'), 'Catalog', $view === 'catalog') ?>
+            <?= nav_item(url('/admin.php?view=terms'), 'Terms', $view === 'terms') ?>
+          <?php endif; ?>
+          <?= nav_group_label('Student & admin') ?>
+          <?= nav_item(url('/admin.php?view=holds'), 'Holds', $view === 'holds') ?>
+          <?php if ($isAdmin): ?>
+            <?= nav_item(url('/admin.php?view=accounts'), 'Accounts', $view === 'accounts') ?>
+          <?php endif; ?>
+          <?= nav_group_label('Insights & preferences') ?>
+          <?= nav_item(url('/admin.php?view=reports'), 'Reports & Analytics', $view === 'reports') ?>
+          <?= nav_item(url('/admin.php?view=messages'), 'Messages', $view === 'messages') ?>
+          <?= nav_item(url('/admin.php?view=settings'), 'Settings', $view === 'settings') ?>
         </nav>
+        <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="mt-4">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+          <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50">Log out</button>
+        </form>
 
         <p class="mt-4 text-xs leading-relaxed text-slate-500">
           <?php if ($isViewer): ?>
@@ -977,6 +1618,12 @@ function nav_item(string $href, string $label, bool $active): string
         'profile_saved' => ['success', 'Student record saved.'],
         'faculty_saved' => ['success', 'Faculty profile saved.'],
         'profile_invalid' => ['error', 'Profile was not updated — check email or phone format.'],
+        'decl_limit' => ['error', 'A student can only have 1 major and 1 minor. Update the declarations and try again.'],
+        'decl_conflict' => ['error', 'Major and minor cannot be in the same department.'],
+        'decl_same_as_other' => ['error', 'Major cannot match current minor (and minor cannot match current major).'],
+        'decl_final_sem' => ['error', 'Major/minor changes are blocked in the final semester.'],
+        'decl_gpa' => ['error', 'GPA is below the minimum required for that major.'],
+        'decl_limit3' => ['error', 'Major change limit reached (max 3).'],
         'hold_added' => ['success', 'Hold added.'],
         'grade_saved' => ['success', 'Transcript grade saved.'],
         'grade_invalid' => ['error', 'Grade was not saved — check course, term, and letter grade.'],
@@ -994,16 +1641,38 @@ function nav_item(string $href, string $label, bool $active): string
     }
     ?>
     <div class="min-w-0">
-      <aside id="adminSidebar" class="hidden lg:block fixed left-0 top-[4.75rem] z-20 h-[calc(100vh-4.75rem)] w-[18rem] overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-200 ease-out">
+      <aside id="adminSidebar" class="fixed left-0 top-[6.25rem] z-20 hidden h-[calc(100vh-6.25rem)] w-[18rem] overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-200 ease-out lg:block lg:top-[5.5rem] lg:h-[calc(100vh-5.5rem)]">
         <div class="pr-1">
           <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
           <nav class="mt-4 space-y-1 text-sm">
             <?= nav_item(url('/admin.php?view=dashboard'), 'Dashboard', $view === 'dashboard') ?>
-            <?= nav_item(url('/admin.php?view=people'), 'ID lookup', $view === 'people') ?>
+            <?= nav_group_label('People & directory') ?>
+            <?= nav_item(url('/admin.php?view=people'), 'People', $view === 'people') ?>
             <?= nav_item(url('/admin.php?view=schedule'), 'Master schedule', $view === 'schedule') ?>
-            <?= nav_item(url('/admin.php?view=enrollment'), 'Directory', $view === 'enrollment') ?>
+            <?= nav_group_label('Scheduling & enrollment') ?>
+            <?= nav_item(url('/admin.php?view=courses'), 'Courses', $view === 'courses' || $view === 'course') ?>
+            <?= nav_item(url('/admin.php?view=enrollment'), 'Enrollment', $view === 'enrollment') ?>
+            <?= nav_item(url('/admin.php?view=departments'), 'Departments', $view === 'departments') ?>
             <?= nav_item(url('/admin.php?view=registration'), 'Registration', $view === 'registration') ?>
+            <?php if ($isAdmin): ?>
+              <?= nav_group_label('Catalog & records') ?>
+              <?= nav_item(url('/admin.php?view=catalog'), 'Catalog', $view === 'catalog') ?>
+              <?= nav_item(url('/admin.php?view=terms'), 'Terms', $view === 'terms') ?>
+            <?php endif; ?>
+            <?= nav_group_label('Student & admin') ?>
+            <?= nav_item(url('/admin.php?view=holds'), 'Holds', $view === 'holds') ?>
+            <?php if ($isAdmin): ?>
+              <?= nav_item(url('/admin.php?view=accounts'), 'Accounts', $view === 'accounts') ?>
+            <?php endif; ?>
+            <?= nav_group_label('Insights & preferences') ?>
+            <?= nav_item(url('/admin.php?view=reports'), 'Reports & Analytics', $view === 'reports') ?>
+            <?= nav_item(url('/admin.php?view=messages'), 'Messages', $view === 'messages') ?>
+            <?= nav_item(url('/admin.php?view=settings'), 'Settings', $view === 'settings') ?>
           </nav>
+          <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="mt-4">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+            <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50">Log out</button>
+          </form>
           <p class="mt-4 text-xs leading-relaxed text-slate-500">
             <?php if ($isViewer): ?>
               <strong class="text-slate-600">Viewer:</strong> browse only. No add/drop or hold changes.
@@ -1017,38 +1686,124 @@ function nav_item(string $href, string $label, bool $active): string
       </aside>
       <div class="mx-auto w-full max-w-[min(100vw-2rem,110rem)] min-w-0">
         <?php if ($view === 'dashboard'): ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Dashboard</h1>
-          <p class="mt-2 text-sm text-slate-600">A snapshot of operations, data quality, and current-term activity.</p>
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 class="text-2xl font-semibold text-slate-900">Dashboard</h1>
+              <p class="mt-2 text-sm text-slate-600">Operations snapshot — enrollment activity, data quality, and this term’s busiest sections.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
+              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
+            </div>
+          </div>
 
-          <div class="mt-6 flex flex-wrap gap-2">
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Master schedule</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=people')) ?>">ID lookup</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Directory</a>
+          <div id="admin-alerts" class="mt-6 scroll-mt-28 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="text-sm font-semibold text-amber-950">Alerts &amp; notices</div>
+              <div class="flex flex-wrap gap-2 text-xs">
+                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%40northbridge.edu')) ?>">Email gaps (<?= (int)($dash['students_missing_email'] ?? 0) + (int)($dash['faculty_missing_email'] ?? 0) ?>)</a>
+                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Phone checks (<?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?>)</a>
+                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Active holds (<?= (int)$counts['holds_active'] ?>)</a>
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-amber-900/90">Tip: use the header search to open <strong class="font-semibold">Master schedule</strong> with your query — fastest way to find people by ID, name, email, or phone.</p>
+          </div>
+
+          <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Current term spotlight</div>
+                <div class="mt-1 text-sm text-slate-600">
+                  <?= $currentTermCode ? ('Top sections — ' . htmlspecialchars($currentTermCode)) : 'No term configured yet.' ?>
+                </div>
+              </div>
+              <a class="text-sm font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Open master schedule →</a>
+            </div>
+
+            <div class="mt-5 grid gap-6 lg:grid-cols-2">
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-slate-800">Top enrolled</div>
+                <div class="mt-3 max-h-[min(28rem,55vh)] overflow-auto rounded-xl border border-slate-200">
+                  <table class="min-w-full text-left text-sm">
+                    <thead class="sticky top-0 z-10 bg-slate-50 text-xs font-semibold uppercase text-slate-500 shadow-sm">
+                      <tr>
+                        <th class="px-3 py-2">Course</th>
+                        <th class="px-3 py-2">Enrolled</th>
+                        <th class="px-3 py-2">Cap</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                      <?php foreach (($dash['top_enrolled'] ?? []) as $r): ?>
+                        <tr class="hover:bg-slate-50/60">
+                          <td class="px-3 py-2">
+                            <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($r['course_id'] ?? '')) ?></div>
+                            <div class="text-xs text-slate-500"><?= htmlspecialchars((string)($r['course_name'] ?? '')) ?></div>
+                          </td>
+                          <td class="px-3 py-2 font-semibold text-slate-900"><?= (int)($r['enrolled_cnt'] ?? 0) ?></td>
+                          <td class="px-3 py-2 text-slate-600"><?= (int)($r['capacity'] ?? 0) ?></td>
+                        </tr>
+                      <?php endforeach; ?>
+                      <?php if (!($dash['top_enrolled'] ?? [])): ?>
+                        <tr><td class="px-3 py-4 text-center text-slate-500" colspan="3">No data.</td></tr>
+                      <?php endif; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-slate-800">Top waitlisted</div>
+                <div class="mt-3 max-h-[min(28rem,55vh)] overflow-auto rounded-xl border border-slate-200">
+                  <table class="min-w-full text-left text-sm">
+                    <thead class="sticky top-0 z-10 bg-slate-50 text-xs font-semibold uppercase text-slate-500 shadow-sm">
+                      <tr>
+                        <th class="px-3 py-2">Course</th>
+                        <th class="px-3 py-2">Waitlist</th>
+                        <th class="px-3 py-2">Enrolled</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                      <?php foreach (($dash['top_waitlisted'] ?? []) as $r): ?>
+                        <tr class="hover:bg-slate-50/60">
+                          <td class="px-3 py-2">
+                            <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($r['course_id'] ?? '')) ?></div>
+                            <div class="text-xs text-slate-500"><?= htmlspecialchars((string)($r['course_name'] ?? '')) ?></div>
+                          </td>
+                          <td class="px-3 py-2 font-semibold text-slate-900"><?= (int)($r['waitlisted_cnt'] ?? 0) ?></td>
+                          <td class="px-3 py-2 text-slate-600"><?= (int)($r['enrolled_cnt'] ?? 0) ?></td>
+                        </tr>
+                      <?php endforeach; ?>
+                      <?php if (!($dash['top_waitlisted'] ?? [])): ?>
+                        <tr><td class="px-3 py-4 text-center text-slate-500" colspan="3">No data.</td></tr>
+                      <?php endif; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div class="text-xs font-semibold uppercase text-slate-500">Students</div>
-              <div class="mt-2 text-3xl font-semibold"><?= (int)$counts['students'] ?></div>
+              <div class="text-xs font-semibold uppercase text-slate-500">Total students</div>
+              <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)$counts['students'] ?></div>
               <div class="mt-2 text-xs text-slate-500"><?= (int)($dash['students_missing_email'] ?? 0) ?> missing email · <?= (int)($dash['students_missing_phone'] ?? 0) ?> missing phone</div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div class="text-xs font-semibold uppercase text-slate-500">Faculty</div>
-              <div class="mt-2 text-3xl font-semibold"><?= (int)$counts['faculty'] ?></div>
+              <div class="text-xs font-semibold uppercase text-slate-500">Total faculty</div>
+              <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)$counts['faculty'] ?></div>
               <div class="mt-2 text-xs text-slate-500"><?= (int)($dash['faculty_missing_email'] ?? 0) ?> missing email · <?= (int)($dash['faculty_missing_phone'] ?? 0) ?> missing phone</div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div class="text-xs font-semibold uppercase text-slate-500">Active holds</div>
-              <div class="mt-2 text-3xl font-semibold"><?= (int)$counts['holds_active'] ?></div>
-              <div class="mt-2 text-xs text-slate-500">Registration may be blocked</div>
+              <div class="text-xs font-semibold uppercase text-slate-500">Active courses (this term)</div>
+              <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)($counts['courses_active_term'] ?? 0) ?></div>
+              <div class="mt-2 text-xs text-slate-500"><?= (int)($dash['term_sections'] ?? 0) ?> sections · <?= (int)($counts['courses_catalog'] ?? 0) ?> courses in catalog</div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div class="text-xs font-semibold uppercase text-slate-500">Current term</div>
-              <div class="mt-2 text-lg font-semibold text-slate-900"><?= $currentTermCode ? htmlspecialchars($currentTermCode) : '—' ?></div>
+              <div class="text-xs font-semibold uppercase text-slate-500">Departments</div>
+              <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)($counts['departments'] ?? 0) ?></div>
               <div class="mt-2 text-xs text-slate-500">
-                <?= (int)($dash['term_sections'] ?? 0) ?> sections ·
+                Term <?= $currentTermCode ? htmlspecialchars($currentTermCode) : '—' ?> ·
                 <?= (int)($dash['term_enrolled'] ?? 0) ?> enrolled ·
                 <?= (int)($dash['term_waitlisted'] ?? 0) ?> waitlisted ·
                 <?= (int)($dash['term_open_seats'] ?? 0) ?> open seats
@@ -1056,106 +1811,473 @@ function nav_item(string $href, string $label, bool $active): string
             </div>
           </div>
 
-          <div class="mt-8 grid gap-6 lg:grid-cols-12">
-            <div class="lg:col-span-4">
-              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Needs attention</div>
-                <ul class="mt-4 space-y-2 text-sm">
-                  <li class="flex items-center justify-between gap-3">
-                    <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%40northbridge.edu')) ?>">Verify school emails</a>
-                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"><?= (int)($dash['students_missing_email'] ?? 0) + (int)($dash['faculty_missing_email'] ?? 0) ?></span>
-                  </li>
-                  <li class="flex items-center justify-between gap-3">
-                    <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Check phone formatting</a>
-                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"><?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?></span>
-                  </li>
-                  <li class="flex items-center justify-between gap-3">
-                    <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Active holds</a>
-                    <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"><?= (int)$counts['holds_active'] ?></span>
-                  </li>
-                </ul>
-                <p class="mt-4 text-xs leading-relaxed text-slate-500">
-                  Tip: use Master schedule search to find specific people quickly by ID, name, email, or phone.
-                </p>
-              </div>
+          <div class="mt-8 grid gap-6 lg:grid-cols-3">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Enrollment trend</div>
+              <p class="mt-1 text-xs text-slate-500">New enrollment rows recorded per month (last 12 months)</p>
+              <div class="mt-3 h-56 w-full"><canvas id="chartEnrollmentLine" aria-label="Enrollment trend chart"></canvas></div>
             </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Students by department</div>
+              <p class="mt-1 text-xs text-slate-500">Declared majors / student-department links</p>
+              <div class="mt-3 h-56 w-full"><canvas id="chartDeptBar" aria-label="Students per department chart"></canvas></div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Course seat status</div>
+              <p class="mt-1 text-xs text-slate-500">Enrollment rows for <?= $currentTermCode ? htmlspecialchars($currentTermCode) : 'current term' ?></p>
+              <div class="mt-3 h-56 w-full"><canvas id="chartStatusDonut" aria-label="Enrollment status breakdown chart"></canvas></div>
+            </div>
+          </div>
 
+          <div class="mt-8 grid gap-6 lg:grid-cols-12">
             <div class="lg:col-span-8">
               <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Current term spotlight</div>
-                    <div class="mt-1 text-sm text-slate-600">
-                      <?= $currentTermCode ? ('Top sections for ' . htmlspecialchars($currentTermCode)) : 'No term data yet.' ?>
-                    </div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent enrollments</div>
+                    <div class="mt-1 text-sm text-slate-600">Latest registration activity across sections</div>
                   </div>
-                  <a class="text-sm font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Open master schedule →</a>
+                  <a class="text-sm font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Open registration →</a>
                 </div>
-
-                <div class="mt-5 grid gap-6 lg:grid-cols-2">
-                  <div class="min-w-0">
-                    <div class="text-sm font-semibold text-slate-800">Top enrolled</div>
-                    <div class="mt-3 overflow-x-auto rounded-xl border border-slate-200">
-                      <table class="min-w-full text-left text-sm">
-                        <thead class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                          <tr>
-                            <th class="px-3 py-2">Course</th>
-                            <th class="px-3 py-2">Enrolled</th>
-                            <th class="px-3 py-2">Cap</th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-200">
-                          <?php foreach (($dash['top_enrolled'] ?? []) as $r): ?>
-                            <tr class="hover:bg-slate-50/60">
-                              <td class="px-3 py-2">
-                                <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($r['course_id'] ?? '')) ?></div>
-                                <div class="text-xs text-slate-500"><?= htmlspecialchars((string)($r['course_name'] ?? '')) ?></div>
-                              </td>
-                              <td class="px-3 py-2 font-semibold text-slate-900"><?= (int)($r['enrolled_cnt'] ?? 0) ?></td>
-                              <td class="px-3 py-2 text-slate-600"><?= (int)($r['capacity'] ?? 0) ?></td>
-                            </tr>
-                          <?php endforeach; ?>
-                          <?php if (!($dash['top_enrolled'] ?? [])): ?>
-                            <tr><td class="px-3 py-4 text-center text-slate-500" colspan="3">No data.</td></tr>
-                          <?php endif; ?>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div class="min-w-0">
-                    <div class="text-sm font-semibold text-slate-800">Top waitlisted</div>
-                    <div class="mt-3 overflow-x-auto rounded-xl border border-slate-200">
-                      <table class="min-w-full text-left text-sm">
-                        <thead class="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                          <tr>
-                            <th class="px-3 py-2">Course</th>
-                            <th class="px-3 py-2">Waitlist</th>
-                            <th class="px-3 py-2">Enrolled</th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-200">
-                          <?php foreach (($dash['top_waitlisted'] ?? []) as $r): ?>
-                            <tr class="hover:bg-slate-50/60">
-                              <td class="px-3 py-2">
-                                <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($r['course_id'] ?? '')) ?></div>
-                                <div class="text-xs text-slate-500"><?= htmlspecialchars((string)($r['course_name'] ?? '')) ?></div>
-                              </td>
-                              <td class="px-3 py-2 font-semibold text-slate-900"><?= (int)($r['waitlisted_cnt'] ?? 0) ?></td>
-                              <td class="px-3 py-2 text-slate-600"><?= (int)($r['enrolled_cnt'] ?? 0) ?></td>
-                            </tr>
-                          <?php endforeach; ?>
-                          <?php if (!($dash['top_waitlisted'] ?? [])): ?>
-                            <tr><td class="px-3 py-4 text-center text-slate-500" colspan="3">No data.</td></tr>
-                          <?php endif; ?>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                <div class="mt-4 max-h-[min(24rem,50vh)] overflow-auto rounded-xl border border-slate-200">
+                  <table class="min-w-full text-left text-sm">
+                    <thead class="sticky top-0 z-10 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                      <tr>
+                        <th class="px-3 py-2">Student</th>
+                        <th class="px-3 py-2">Course</th>
+                        <th class="px-3 py-2">When</th>
+                        <th class="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                      <?php foreach (($dash['recent_enrollments'] ?? []) as $re): ?>
+                        <?php
+                          $stuName = trim((string)($re['first_name'] ?? '') . ' ' . (string)($re['last_name'] ?? ''));
+                          $created = $re['created_at'] ?? '';
+                          $createdFmt = is_string($created) && $created !== '' ? date('M j, Y g:i a', strtotime($created)) : '—';
+                        ?>
+                        <tr class="hover:bg-slate-50/60">
+                          <td class="px-3 py-2">
+                            <div class="font-semibold text-slate-900"><?= htmlspecialchars($stuName !== '' ? $stuName : '—') ?></div>
+                            <div class="font-mono text-xs text-slate-500"><?= (int)($re['student_id'] ?? 0) ?></div>
+                          </td>
+                          <td class="px-3 py-2">
+                            <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($re['course_id'] ?? '')) ?></div>
+                            <div class="text-xs text-slate-500"><?= htmlspecialchars((string)($re['course_name'] ?? '')) ?></div>
+                          </td>
+                          <td class="whitespace-nowrap px-3 py-2 text-slate-600"><?= htmlspecialchars($createdFmt) ?></td>
+                          <td class="px-3 py-2">
+                            <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 <?= admin_enrollment_badge_classes((string)($re['status'] ?? '')) ?>">
+                              <?= htmlspecialchars(ucfirst((string)($re['status'] ?? ''))) ?>
+                            </span>
+                          </td>
+                        </tr>
+                      <?php endforeach; ?>
+                      <?php if (!($dash['recent_enrollments'] ?? [])): ?>
+                        <tr><td class="px-3 py-6 text-center text-slate-500" colspan="4">No enrollment rows yet.</td></tr>
+                      <?php endif; ?>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
+            <div class="lg:col-span-4">
+              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick actions</div>
+                <ul class="mt-4 space-y-2 text-sm">
+                  <li><a class="inline-flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-semibold text-slate-900 hover:bg-slate-100" href="<?= htmlspecialchars(url('/admin.php?view=people')) ?>">Add / lookup student <span aria-hidden="true">→</span></a></li>
+                  <li><a class="inline-flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-semibold text-slate-900 hover:bg-slate-100" href="<?= htmlspecialchars(url('/admin.php?view=people')) ?>">Add / lookup faculty <span aria-hidden="true">→</span></a></li>
+                  <li><a class="inline-flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-semibold text-slate-900 hover:bg-slate-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Create / edit sections <span aria-hidden="true">→</span></a></li>
+                  <li><a class="inline-flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-semibold text-slate-900 hover:bg-slate-100" href="<?= htmlspecialchars(url('/admin.php?view=reports')) ?>">Generate report <span aria-hidden="true">→</span></a></li>
+                </ul>
+                <p class="mt-4 text-xs leading-relaxed text-slate-500">People records usually come from registrar import; use lookup after IDs exist.</p>
+              </div>
+            </div>
           </div>
+
+          <div class="mt-8 grid gap-6 lg:grid-cols-2">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent activity</div>
+              <p class="mt-1 text-sm text-slate-600">Latest actions logged from this admin portal</p>
+              <ul class="mt-4 max-h-80 space-y-3 overflow-y-auto text-sm">
+                <?php foreach (($dash['audit_recent'] ?? []) as $ar): ?>
+                  <?php
+                    $ts = $ar['created_at'] ?? '';
+                    $tsFmt = is_string($ts) && $ts !== '' ? date('M j, g:i a', strtotime($ts)) : '';
+                  ?>
+                  <li class="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <span class="font-semibold text-slate-900"><?= htmlspecialchars((string)($ar['action'] ?? '')) ?></span>
+                      <span class="shrink-0 text-xs text-slate-400"><?= htmlspecialchars($tsFmt) ?></span>
+                    </div>
+                    <div class="mt-0.5 text-xs text-slate-500"><?= htmlspecialchars((string)($ar['actor'] ?? '')) ?></div>
+                    <?php if (!empty($ar['details'])): ?>
+                      <div class="mt-1 text-xs text-slate-600"><?= htmlspecialchars((string)$ar['details']) ?></div>
+                    <?php endif; ?>
+                  </li>
+                <?php endforeach; ?>
+                <?php if (!($dash['audit_recent'] ?? [])): ?>
+                  <li class="text-sm text-slate-500">No audit entries yet — actions like registration changes will appear here.</li>
+                <?php endif; ?>
+              </ul>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Needs attention (detail)</div>
+              <ul class="mt-4 space-y-2 text-sm">
+                <li class="flex items-center justify-between gap-3">
+                  <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%40northbridge.edu')) ?>">Verify school emails</a>
+                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"><?= (int)($dash['students_missing_email'] ?? 0) + (int)($dash['faculty_missing_email'] ?? 0) ?></span>
+                </li>
+                <li class="flex items-center justify-between gap-3">
+                  <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Check phone formatting</a>
+                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"><?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?></span>
+                </li>
+                <li class="flex items-center justify-between gap-3">
+                  <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=holds')) ?>">Active holds</a>
+                  <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"><?= (int)$counts['holds_active'] ?></span>
+                </li>
+              </ul>
+              <p class="mt-4 text-xs text-slate-500"><strong class="font-semibold text-slate-700">Exam season / approvals:</strong> wire calendar milestones here when you add workflow tables.</p>
+            </div>
+          </div>
+
+          <?php
+            $chartMonthLabels = json_encode($dash['chart_month_labels'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $chartMonthValues = json_encode($dash['chart_month_values'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $chartDeptLabels = json_encode($dash['chart_dept_labels'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $chartDeptValues = json_encode($dash['chart_dept_values'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $chartStatusLabels = json_encode($dash['chart_status_labels'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $chartStatusValues = json_encode($dash['chart_status_values'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $chartStatusColors = json_encode($dash['chart_status_colors'] ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+          ?>
+          <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+          <script>
+          (function () {
+            var ChartRef = window.Chart;
+            if (!ChartRef) return;
+
+            var monthLabels = <?= $chartMonthLabels ?>;
+            var monthVals = <?= $chartMonthValues ?>;
+            var deptLabels = <?= $chartDeptLabels ?>;
+            var deptVals = <?= $chartDeptValues ?>;
+            var stLabels = <?= $chartStatusLabels ?>;
+            var stVals = <?= $chartStatusValues ?>;
+            var stColors = <?= $chartStatusColors ?>;
+
+            var lineEl = document.getElementById('chartEnrollmentLine');
+            if (lineEl && monthLabels.length) {
+              new ChartRef(lineEl, {
+                type: 'line',
+                data: {
+                  labels: monthLabels,
+                  datasets: [{
+                    label: 'Enrollment rows',
+                    data: monthVals,
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.12)',
+                    fill: true,
+                    tension: 0.25,
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    x: { ticks: { maxRotation: 45, minRotation: 0 } },
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                  }
+                }
+              });
+            }
+
+            var barEl = document.getElementById('chartDeptBar');
+            if (barEl && deptLabels.length) {
+              new ChartRef(barEl, {
+                type: 'bar',
+                data: {
+                  labels: deptLabels,
+                  datasets: [{
+                    label: 'Students',
+                    data: deptVals,
+                    backgroundColor: 'rgba(14, 165, 233, 0.65)',
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    x: { ticks: { maxRotation: 35, minRotation: 0 } },
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                  }
+                }
+              });
+            }
+
+            var donutEl = document.getElementById('chartStatusDonut');
+            if (donutEl && stLabels.length) {
+              new ChartRef(donutEl, {
+                type: 'doughnut',
+                data: {
+                  labels: stLabels,
+                  datasets: [{
+                    data: stVals,
+                    backgroundColor: stColors.length ? stColors : ['#64748b'],
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12 } }
+                  }
+                }
+              });
+            }
+          })();
+          </script>
+
+        <?php elseif ($view === 'reports'): ?>
+          <?php
+          $reportsEnrollmentRows = [];
+          if ($currentTermId !== null && $isAdmin) {
+              try {
+                  $rq = $pdo->prepare('
+                    SELECT
+                      c.course_id,
+                      c.course_name,
+                      s.section_id,
+                      t.code AS term_code,
+                      s.capacity,
+                      (SELECT COUNT(*) FROM enrollments e WHERE e.section_id = s.section_id AND e.status = "enrolled") AS enrolled_cnt,
+                      (SELECT COUNT(*) FROM enrollments e WHERE e.section_id = s.section_id AND e.status = "waitlisted") AS waitlisted_cnt
+                    FROM sections s
+                    INNER JOIN courses c ON c.course_id = s.course_id
+                    INNER JOIN terms t ON t.term_id = s.term_id
+                    WHERE s.term_id = ?
+                    ORDER BY c.course_id, s.section_id
+                    LIMIT 200
+                  ');
+                  $rq->execute([$currentTermId]);
+                  $reportsEnrollmentRows = $rq->fetchAll(PDO::FETCH_ASSOC) ?: [];
+              } catch (Throwable) {
+              }
+          }
+          ?>
+          <h1 class="text-2xl font-semibold text-slate-900">Reports &amp; Analytics</h1>
+          <p class="mt-2 text-sm text-slate-600">Enrollment by section for the current term, CSV export, and links to operational views.</p>
+          <div class="mt-6 flex flex-wrap gap-3">
+            <?php if ($isAdmin && $currentTermCode !== null): ?>
+              <a class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" href="<?= htmlspecialchars(url('/admin.php?view=reports&export=enrollment_summary')) ?>">Download enrollment CSV (<?= htmlspecialchars($currentTermCode) ?>)</a>
+            <?php endif; ?>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard charts</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Enrollment</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=departments')) ?>">Departments</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Master schedule</a>
+          </div>
+          <?php if ($isAdmin && $currentTermCode !== null): ?>
+            <div class="mt-8 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table class="min-w-full text-left text-sm">
+                <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                  <tr>
+                    <th class="px-4 py-3">Course</th>
+                    <th class="px-4 py-3">Section</th>
+                    <th class="px-4 py-3">Term</th>
+                    <th class="px-4 py-3">Enrolled</th>
+                    <th class="px-4 py-3">Cap</th>
+                    <th class="px-4 py-3">Waitlist</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  <?php foreach ($reportsEnrollmentRows as $rr): ?>
+                    <tr class="hover:bg-slate-50/70">
+                      <td class="px-4 py-3">
+                        <div class="font-semibold text-slate-900"><?= htmlspecialchars((string)($rr['course_id'] ?? '')) ?></div>
+                        <div class="text-xs text-slate-600"><?= htmlspecialchars((string)($rr['course_name'] ?? '')) ?></div>
+                      </td>
+                      <td class="px-4 py-3 font-mono text-xs">#<?= (int)($rr['section_id'] ?? 0) ?></td>
+                      <td class="px-4 py-3"><?= htmlspecialchars((string)($rr['term_code'] ?? '')) ?></td>
+                      <td class="px-4 py-3 tabular-nums"><?= (int)($rr['enrolled_cnt'] ?? 0) ?></td>
+                      <td class="px-4 py-3 tabular-nums"><?= (int)($rr['capacity'] ?? 0) ?></td>
+                      <td class="px-4 py-3 tabular-nums"><?= (int)($rr['waitlisted_cnt'] ?? 0) ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                  <?php if (!$reportsEnrollmentRows): ?>
+                    <tr><td class="px-4 py-8 text-center text-slate-500" colspan="6">No sections for the current term, or you need admin access to load this table.</td></tr>
+                  <?php endif; ?>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-3 text-xs text-slate-500">CSV includes all sections for the current term (not truncated).</p>
+          <?php elseif (!$isAdmin): ?>
+            <p class="mt-6 text-sm text-slate-600">CSV export and the detailed table require an administrator role. Use the dashboard for charts.</p>
+          <?php endif; ?>
+
+        <?php elseif ($view === 'catalog'): ?>
+          <?php if (!$isAdmin): ?>
+            <h1 class="text-2xl font-semibold text-slate-900">Course catalog</h1>
+            <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Catalog editing requires an administrator role.</div>
+          <?php else: ?>
+            <?php
+            $catalogFlash = trim((string)($_GET['msg'] ?? ''));
+            $catalogFlashMap = [
+                'course_saved' => ['success', 'Course saved.'],
+                'prereqs_saved' => ['success', 'Prerequisites updated.'],
+                'catalog_invalid' => ['error', 'Could not save — check course ID, name, and credits.'],
+            ];
+            if ($catalogFlash !== '' && isset($catalogFlashMap[$catalogFlash])) {
+                [$ct, $ctxt] = $catalogFlashMap[$catalogFlash];
+                $ccls = $ct === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-rose-200 bg-rose-50 text-rose-950';
+                echo '<div class="mb-6 rounded-2xl border ' . $ccls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($ctxt) . '</div>';
+            }
+            $catalogCourses = [];
+            try {
+                $catalogCourses = $pdo->query('
+                  SELECT c.course_id, c.course_name, c.credits, c.dept_id, c.description,
+                    IFNULL(c.is_active, 1) AS is_active, d.dept_name
+                  FROM courses c
+                  LEFT JOIN departments d ON d.dept_id = c.dept_id
+                  ORDER BY c.course_id
+                ')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable) {
+                $catalogCourses = $pdo->query('
+                  SELECT c.course_id, c.course_name, c.credits, c.dept_id, d.dept_name
+                  FROM courses c
+                  LEFT JOIN departments d ON d.dept_id = c.dept_id
+                  ORDER BY c.course_id
+                ')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($catalogCourses as &$cc) {
+                    $cc['description'] = null;
+                    $cc['is_active'] = 1;
+                }
+                unset($cc);
+            }
+            $departments = $pdo->query('SELECT dept_id, dept_name FROM departments ORDER BY dept_name')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $editCourse = null;
+            $editPrereqs = [];
+            $ek = strtoupper(trim((string)($_GET['edit'] ?? '')));
+            if ($ek !== '') {
+                $st = $pdo->prepare('SELECT * FROM courses WHERE course_id = ? LIMIT 1');
+                $st->execute([$ek]);
+                $editCourse = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+                if ($editCourse) {
+                    $pre = $pdo->prepare('SELECT prereq_course_id FROM course_prereqs WHERE course_id = ?');
+                    $pre->execute([$ek]);
+                    $editPrereqs = array_map('strval', $pre->fetchAll(PDO::FETCH_COLUMN) ?: []);
+                }
+            }
+            $acr = $pdo->query('SELECT course_id FROM courses ORDER BY course_id');
+            $allCourseIds = $acr ? array_map('strval', $acr->fetchAll(PDO::FETCH_COLUMN) ?: []) : [];
+            require __DIR__ . '/../app/views/pages/admin/catalog_manage.php';
+            ?>
+          <?php endif; ?>
+
+        <?php elseif ($view === 'terms'): ?>
+          <?php if (!$isAdmin): ?>
+            <h1 class="text-2xl font-semibold text-slate-900">Terms</h1>
+            <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Term registration settings require an administrator role.</div>
+          <?php else: ?>
+            <?php
+            $termFlash = trim((string)($_GET['msg'] ?? ''));
+            $termFlashMap = [
+                'term_saved' => ['success', 'Term registration settings saved.'],
+                'invalid' => ['error', 'Invalid request.'],
+                'term_save_failed' => ['error', 'Could not save — run database migrations for registration columns.'],
+            ];
+            if ($termFlash !== '' && isset($termFlashMap[$termFlash])) {
+                [$tt, $ttxt] = $termFlashMap[$termFlash];
+                $tcls = $tt === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-rose-200 bg-rose-50 text-rose-950';
+                echo '<div class="mb-6 rounded-2xl border ' . $tcls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($ttxt) . '</div>';
+            }
+            $termsRows = [];
+            try {
+                $termsRows = $pdo->query('
+                  SELECT term_id, code, name, registration_open, registration_start, registration_end
+                  FROM terms ORDER BY start_date DESC
+                ')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable) {
+                $termsRows = $pdo->query('SELECT term_id, code, name FROM terms ORDER BY start_date DESC')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($termsRows as &$tr) {
+                    $tr['registration_open'] = 1;
+                    $tr['registration_start'] = null;
+                    $tr['registration_end'] = null;
+                }
+                unset($tr);
+                echo '<div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Registration window columns are missing — run migrations, then save again.</div>';
+            }
+            require __DIR__ . '/../app/views/pages/admin/terms_registration.php';
+            ?>
+          <?php endif; ?>
+
+        <?php elseif ($view === 'holds'): ?>
+          <?php
+          $holdRows = [];
+          try {
+              $holdRows = $pdo->query('
+                SELECT h.student_id, h.hold_type, h.note, h.created_at, u.first_name, u.last_name
+                FROM student_holds h
+                INNER JOIN users u ON u.user_id = h.student_id
+                WHERE h.is_active = 1
+                ORDER BY h.created_at DESC
+                LIMIT 500
+              ')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+          } catch (Throwable) {
+          }
+          require __DIR__ . '/../app/views/pages/admin/holds_directory.php';
+          ?>
+
+        <?php elseif ($view === 'accounts'): ?>
+          <?php if (!$isAdmin): ?>
+            <h1 class="text-2xl font-semibold text-slate-900">Accounts</h1>
+            <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Staff account management requires an administrator role.</div>
+          <?php else: ?>
+            <?php
+            $acctFlash = trim((string)($_GET['msg'] ?? ''));
+            $acctFlashMap = [
+                'pwd_reset' => ['success', 'Password updated.'],
+                'pwd_invalid' => ['error', 'Password must be at least 8 characters.'],
+                'active_saved' => ['success', 'Account access updated.'],
+                'self_not_allowed' => ['error', 'You cannot deactivate your own account.'],
+                'invalid' => ['error', 'Invalid request.'],
+                'active_failed' => ['error', 'Could not update — ensure auth_users.is_active exists (run migrations).'],
+            ];
+            if ($acctFlash !== '' && isset($acctFlashMap[$acctFlash])) {
+                [$at, $atxt] = $acctFlashMap[$acctFlash];
+                $acls = $at === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-rose-200 bg-rose-50 text-rose-950';
+                echo '<div class="mb-6 rounded-2xl border ' . $acls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($atxt) . '</div>';
+            }
+            $authRows = [];
+            try {
+                $authRows = $pdo->query('SELECT id, username, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable) {
+                $authRows = $pdo->query('SELECT id, username, role FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($authRows as &$ar) {
+                    $ar['is_active'] = 1;
+                }
+                unset($ar);
+            }
+            require __DIR__ . '/../app/views/pages/admin/accounts_manage.php';
+            ?>
+          <?php endif; ?>
+
+        <?php elseif ($view === 'messages'): ?>
+          <h1 class="text-2xl font-semibold text-slate-900">Messages</h1>
+          <p class="mt-2 max-w-2xl text-sm text-slate-600">In-app messaging is not enabled yet. Use official email for registrar communications.</p>
+          <div class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+            Coming soon — optional inbox tied to holds and registration events.
+          </div>
+
+        <?php elseif ($view === 'settings'): ?>
+          <h1 class="text-2xl font-semibold text-slate-900">Settings</h1>
+          <p class="mt-2 text-sm text-slate-600">Shortcuts to operational configuration available today.</p>
+          <ul class="mt-6 space-y-3 text-sm">
+            <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=holds')) ?>">Active holds directory</a></li>
+            <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Legacy holds page</a></li>
+            <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/')) ?>">Public site home</a></li>
+            <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/login.php')) ?>">Staff login page</a> <span class="text-slate-500">(sign out first to create another admin)</span></li>
+          </ul>
+          <p class="mt-6 text-xs text-slate-500">Your role: <strong class="font-semibold text-slate-700"><?= htmlspecialchars($roleLabel) ?></strong></p>
 
         <?php elseif ($view === 'people'): ?>
           <?php
@@ -1181,7 +2303,7 @@ function nav_item(string $href, string $label, bool $active): string
           <div class="<?= $idLookupHasSearch ? 'space-y-6' : 'space-y-8' ?>">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-900">ID lookup</h1>
+                <h1 class="text-2xl font-semibold text-slate-900">Students &amp; faculty</h1>
                 <?php if (!$idLookupHasSearch): ?>
                   <p class="mt-2 text-sm text-slate-600">Enter a student or faculty numeric ID to load their record.</p>
                 <?php else: ?>
@@ -1879,6 +3001,7 @@ function nav_item(string $href, string $label, bool $active): string
                           <?php if ($stuDepts): ?>
                           <div class="sm:col-span-2 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
                             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Major / minor per declaration</div>
+                            <p class="mt-1 text-xs text-slate-600">Rules: max 1 major and max 1 minor. Major cannot match minor. Major/minor changes are blocked for Seniors unless an admin override is used.</p>
                             <div class="mt-3 space-y-3">
                               <?php foreach ($stuDepts as $sd): ?>
                                 <?php $did = htmlspecialchars((string)($sd['dept_id'] ?? '')); ?>
@@ -1889,6 +3012,17 @@ function nav_item(string $href, string $label, bool $active): string
                                     <option value="major" <?= $dr === 'major' ? 'selected' : '' ?>>Major</option>
                                     <option value="minor" <?= $dr === 'minor' ? 'selected' : '' ?>>Minor</option>
                                   </select>
+                                  <?php if ($isAdmin && $dr === 'major'): ?>
+                                    <label class="inline-flex items-center gap-2 text-xs font-semibold text-rose-700">
+                                      <input type="checkbox" name="remove_major" value="1" />
+                                      Remove major
+                                    </label>
+                                  <?php elseif ($isAdmin && $dr === 'minor'): ?>
+                                    <label class="inline-flex items-center gap-2 text-xs font-semibold text-rose-700">
+                                      <input type="checkbox" name="remove_minor" value="1" />
+                                      Remove minor
+                                    </label>
+                                  <?php endif; ?>
                                 </div>
                               <?php endforeach; ?>
                             </div>
@@ -1929,6 +3063,17 @@ function nav_item(string $href, string $label, bool $active): string
                           <?php elseif ($canManageHolds && $allDeptRows === []): ?>
                           <div class="sm:col-span-2 rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs text-amber-950">
                             Cannot add a major or minor until there are rows in <code class="rounded bg-white px-1">departments</code> (run registrar import or insert departments first).
+                          </div>
+                          <?php endif; ?>
+                          <?php if ($isAdmin): ?>
+                          <div class="sm:col-span-2 rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+                            <div class="text-xs font-semibold uppercase tracking-wide text-amber-950">Admin overrides</div>
+                            <p class="mt-1 text-xs text-slate-700">Overrides still log the change. Use sparingly.</p>
+                            <div class="mt-3 grid gap-2 sm:grid-cols-2 text-sm text-slate-800">
+                              <label class="inline-flex items-center gap-2"><input type="checkbox" name="override_major_limit" value="1" /> Override 3-change major limit</label>
+                              <label class="inline-flex items-center gap-2"><input type="checkbox" name="override_final_semester" value="1" /> Override final-semester block</label>
+                              <label class="inline-flex items-center gap-2"><input type="checkbox" name="override_gpa" value="1" /> Override GPA minimum</label>
+                            </div>
                           </div>
                           <?php endif; ?>
                           <?php if ($isAdmin): ?>
@@ -2529,6 +3674,23 @@ function nav_item(string $href, string $label, bool $active): string
 
           </div>
 
+        <?php elseif ($view === 'courses'): ?>
+          <?php
+          require_once __DIR__ . '/../app/lib/admin_course_offerings.php';
+          $courseOfferingsState = admin_course_offerings_state($pdo, $_GET);
+          extract($courseOfferingsState, EXTR_SKIP);
+          require view_path('pages/admin/course_offerings.php');
+          ?>
+
+        <?php elseif ($view === 'course'): ?>
+          <?php
+          require_once __DIR__ . '/../app/lib/admin_course_detail.php';
+          $courseDetailState = admin_course_detail_state($pdo, $_GET);
+          extract($courseDetailState, EXTR_SKIP);
+          $can_edit_catalog = $isAdmin;
+          require view_path('pages/admin/course_detail.php');
+          ?>
+
         <?php elseif ($view === 'schedule'): ?>
           <?php
           require_once __DIR__ . '/../app/lib/admin_schedule.php';
@@ -2539,29 +3701,237 @@ function nav_item(string $href, string $label, bool $active): string
           ?>
 
         <?php elseif ($view === 'enrollment'): ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Directory</h1>
-          <p class="mt-2 text-sm text-slate-600">All students in the database.</p>
           <?php
-          $dir = $pdo->query('
-            SELECT u.user_id, u.first_name, u.last_name
-            FROM users u
-            JOIN students s ON s.student_id = u.user_id
-            ORDER BY u.last_name, u.first_name
+          $termCode = trim((string)($_GET['term'] ?? ''));
+          if ($termCode === '' && $currentTermCode !== null) {
+              $termCode = $currentTermCode;
+          }
+          $status = strtolower(trim((string)($_GET['status'] ?? '')));
+          if ($status !== '' && $status !== 'enrolled' && $status !== 'waitlisted' && $status !== 'dropped') {
+              $status = '';
+          }
+          $q = trim((string)($_GET['q'] ?? ''));
+
+          $terms = [];
+          try {
+              $terms = $pdo->query('SELECT code, name FROM terms ORDER BY start_date DESC')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+          } catch (Throwable) {
+          }
+
+          $rows = [];
+          try {
+              $sql = '
+                SELECT
+                  e.enrollment_id,
+                  e.status,
+                  e.created_at,
+                  s.section_id,
+                  s.meeting_days,
+                  s.meeting_time,
+                  s.room,
+                  s.capacity,
+                  t.term_id AS term_id,
+                  t.code AS term_code,
+                  c.course_id,
+                  c.course_name,
+                  c.credits,
+                  COALESCE(sf.first_name,"") AS fac_first,
+                  COALESCE(sf.last_name,"") AS fac_last,
+                  u.user_id AS student_id,
+                  u.first_name,
+                  u.last_name,
+                  u.email,
+                  u.phone_number,
+                  u.city,
+                  u.state,
+                  u.zip_code,
+                  u.gender,
+                  u.dob
+                FROM enrollments e
+                INNER JOIN sections s ON s.section_id = e.section_id
+                INNER JOIN terms t ON t.term_id = s.term_id
+                INNER JOIN courses c ON c.course_id = s.course_id
+                INNER JOIN users u ON u.user_id = e.student_id
+                LEFT JOIN faculty f ON f.faculty_id = s.faculty_id
+                LEFT JOIN users sf ON sf.user_id = f.faculty_id
+                WHERE 1=1
+              ';
+              $bind = [];
+              if ($termCode !== '') {
+                  $sql .= ' AND t.code = ?';
+                  $bind[] = $termCode;
+              }
+              if ($status !== '') {
+                  $sql .= ' AND e.status = ?';
+                  $bind[] = $status;
+              }
+              if ($q !== '') {
+                  $sql .= ' AND (
+                    CAST(u.user_id AS CHAR) LIKE ?
+                    OR LOWER(CONCAT(u.first_name," ",u.last_name)) LIKE ?
+                    OR LOWER(COALESCE(u.email,"")) LIKE ?
+                    OR LOWER(c.course_id) LIKE ?
+                    OR LOWER(c.course_name) LIKE ?
+                    OR CAST(s.section_id AS CHAR) LIKE ?
+                  )';
+                  $like = '%' . strtolower($q) . '%';
+                  $likeId = '%' . $q . '%';
+                  $bind = array_merge($bind, [$likeId, $like, $like, $like, $like, $likeId]);
+              }
+              $sql .= ' ORDER BY e.created_at DESC LIMIT 250';
+              $st = $pdo->prepare($sql);
+              $st->execute($bind);
+              $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+          } catch (Throwable) {
+              $rows = [];
+          }
+          ?>
+          <h1 class="text-2xl font-semibold text-slate-900">Enrollment</h1>
+          <p class="mt-2 text-sm text-slate-600">Who is enrolled in what (with student + section + course attributes). Use filters to narrow down results.</p>
+
+          <div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
+              <input type="hidden" name="view" value="enrollment" />
+              <div class="sm:w-64">
+                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="en-term">Term</label>
+                <select id="en-term" name="term" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <option value="">All terms</option>
+                  <?php foreach ($terms as $t): $c = (string)($t['code'] ?? ''); ?>
+                    <option value="<?= htmlspecialchars($c) ?>" <?= $c !== '' && $c === $termCode ? 'selected' : '' ?>><?= htmlspecialchars($c) ?> — <?= htmlspecialchars((string)($t['name'] ?? '')) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="sm:w-56">
+                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="en-status">Status</label>
+                <select id="en-status" name="status" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <option value="">All</option>
+                  <option value="enrolled" <?= $status === 'enrolled' ? 'selected' : '' ?>>Enrolled</option>
+                  <option value="waitlisted" <?= $status === 'waitlisted' ? 'selected' : '' ?>>Waitlisted</option>
+                  <option value="dropped" <?= $status === 'dropped' ? 'selected' : '' ?>>Dropped</option>
+                </select>
+              </div>
+              <div class="min-w-0 flex-1">
+                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="en-q">Search</label>
+                <input id="en-q" name="q" value="<?= htmlspecialchars($q) ?>" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Student ID, name, email, course, section…" />
+              </div>
+              <button class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Filter</button>
+              <a class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Reset</a>
+            </form>
+            <div class="mt-3 text-xs text-slate-500">Showing up to 250 newest rows.</div>
+          </div>
+
+          <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <table class="min-w-[72rem] text-left text-sm">
+              <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th class="px-4 py-3">Student</th>
+                  <th class="px-4 py-3">Course / section</th>
+                  <th class="px-4 py-3">Term</th>
+                  <th class="px-4 py-3">Status</th>
+                  <th class="px-4 py-3">When / where</th>
+                  <th class="px-4 py-3">Faculty</th>
+                  <th class="px-4 py-3">Student attributes</th>
+                  <th class="px-4 py-3">Created</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                <?php foreach ($rows as $r): ?>
+                  <?php
+                    $sid = (int)($r['student_id'] ?? 0);
+                    $stuName = trim((string)($r['first_name'] ?? '') . ' ' . (string)($r['last_name'] ?? ''));
+                    $facName = trim((string)($r['fac_first'] ?? '') . ' ' . (string)($r['fac_last'] ?? ''));
+                    $st = (string)($r['status'] ?? '');
+                    $badge = $st === 'enrolled' ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : ($st === 'waitlisted' ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'bg-slate-100 text-slate-700 ring-slate-200');
+                    $created = (string)($r['created_at'] ?? '');
+                    $createdFmt = $created !== '' ? date('M j, g:i a', strtotime($created)) : '';
+                  ?>
+                  <tr class="hover:bg-slate-50/70 align-top">
+                    <td class="px-4 py-3">
+                      <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=people&id=' . $sid)) ?>"><?= $sid ?></a>
+                      <div class="text-xs text-slate-600"><?= htmlspecialchars($stuName !== '' ? $stuName : 'Student') ?></div>
+                      <?php if (!empty($r['email'])): ?><div class="text-[11px] text-slate-500"><?= htmlspecialchars((string)$r['email']) ?></div><?php endif; ?>
+                    </td>
+                    <td class="px-4 py-3">
+                      <?php
+                        $enrCid = (string)($r['course_id'] ?? '');
+                        $enrTid = isset($r['term_id']) ? (int)$r['term_id'] : 0;
+                        $enrSec = (int)($r['section_id'] ?? 0);
+                        $enrCourseLink = url('/admin.php?' . http_build_query(array_filter([
+                            'view' => 'course',
+                            'course_id' => $enrCid,
+                            'term_id' => $enrTid > 0 ? (string)$enrTid : null,
+                            'highlight_section' => $enrSec > 0 ? (string)$enrSec : null,
+                        ])));
+                      ?>
+                      <a class="block font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars($enrCourseLink) ?>">
+                        <?= htmlspecialchars($enrCid) ?> <span class="text-slate-400">·</span> <span class="font-mono text-xs">#<?= $enrSec ?></span>
+                      </a>
+                      <div class="text-xs text-slate-600"><?= htmlspecialchars((string)($r['course_name'] ?? '')) ?> · <?= (int)($r['credits'] ?? 0) ?> cr</div>
+                    </td>
+                    <td class="px-4 py-3"><?= htmlspecialchars((string)($r['term_code'] ?? '')) ?></td>
+                    <td class="px-4 py-3"><span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 <?= $badge ?>"><?= htmlspecialchars(ucfirst($st)) ?></span></td>
+                    <td class="px-4 py-3 text-xs text-slate-700">
+                      <?= htmlspecialchars(trim((string)($r['meeting_days'] ?? '') . ' ' . (string)($r['meeting_time'] ?? ''))) ?>
+                      <?php if (!empty($r['room'])): ?><div class="text-[11px] text-slate-500"><?= htmlspecialchars((string)$r['room']) ?></div><?php endif; ?>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-slate-700"><?= htmlspecialchars($facName !== '' ? $facName : '—') ?></td>
+                    <td class="px-4 py-3 text-[11px] text-slate-600">
+                      <?php
+                        $attr = [];
+                        if (!empty($r['phone_number'])) $attr[] = 'Phone ' . (string)$r['phone_number'];
+                        $loc = trim((string)($r['city'] ?? '') . (empty($r['state']) ? '' : ', ' . (string)$r['state']) . (empty($r['zip_code']) ? '' : ' ' . (string)$r['zip_code']));
+                        if ($loc !== '') $attr[] = $loc;
+                        if (!empty($r['gender'])) $attr[] = (string)$r['gender'];
+                        if (!empty($r['dob'])) $attr[] = 'DOB ' . (string)$r['dob'];
+                      ?>
+                      <?= htmlspecialchars($attr ? implode(' · ', $attr) : '—') ?>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap"><?= htmlspecialchars($createdFmt) ?></td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php if (!$rows): ?>
+                  <tr><td class="px-4 py-10 text-center text-slate-500" colspan="8">No enrollment rows match your filters.</td></tr>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+
+        <?php elseif ($view === 'departments'): ?>
+          <h1 class="text-2xl font-semibold text-slate-900">Departments</h1>
+          <p class="mt-2 text-sm text-slate-600">All departments available in the system.</p>
+          <?php
+          $depts = $pdo->query('
+            SELECT dept_id, dept_name
+            FROM departments
+            ORDER BY dept_name, dept_id
           ')->fetchAll(PDO::FETCH_ASSOC);
           ?>
           <div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-            <table class="min-w-full text-sm">
-              <thead class="border-b border-slate-200 text-xs uppercase text-slate-500"><tr><th class="px-4 py-3">Student ID</th><th class="px-4 py-3">Name</th></tr></thead>
+            <table class="min-w-full table-fixed text-sm">
+              <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                <tr>
+                  <th class="w-28 px-3 py-2 sm:px-4 sm:py-3">Dept ID</th>
+                  <th class="px-3 py-2 sm:px-4 sm:py-3">Department</th>
+                </tr>
+              </thead>
               <tbody class="divide-y divide-slate-200">
-                <?php foreach ($dir as $r): ?>
-                  <?php $sid = (int)$r['user_id']; ?>
+                <?php foreach ($depts as $d): ?>
                   <tr>
-                    <td class="px-4 py-3">
-                      <a class="inline-flex rounded-md bg-sky-100 px-2 py-0.5 font-mono text-sm font-semibold tabular-nums text-sky-950 ring-1 ring-inset ring-sky-200/90 hover:bg-sky-200/90" href="<?= htmlspecialchars(url('/admin.php?view=people&id=' . $sid)) ?>"><?= $sid ?></a>
+                    <td class="px-3 py-2 sm:px-4 sm:py-3 align-top">
+                      <span class="inline-flex max-w-full rounded-md bg-sky-100 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums text-sky-950 ring-1 ring-inset ring-sky-200/90">
+                        <?= htmlspecialchars((string)($d['dept_id'] ?? '')) ?>
+                      </span>
                     </td>
-                    <td class="px-4 py-3"><?= htmlspecialchars($r['last_name'] . ', ' . $r['first_name']) ?></td>
+                    <td class="px-3 py-2 sm:px-4 sm:py-3 font-medium text-slate-900">
+                      <div class="break-words" title="<?= htmlspecialchars((string)($d['dept_name'] ?? '')) ?>">
+                        <?= htmlspecialchars((string)($d['dept_name'] ?? '')) ?>
+                      </div>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
+                <?php if (!$depts): ?>
+                  <tr><td class="px-4 py-8 text-center text-slate-500" colspan="2">No departments found.</td></tr>
+                <?php endif; ?>
               </tbody>
             </table>
           </div>
@@ -2583,6 +3953,10 @@ function nav_item(string $href, string $label, bool $active): string
               'dupecourse' => ['error', 'Already in course this term.'],
               'wrongterm' => ['error', 'Wrong term.'],
               'invalid' => ['error', 'Invalid request.'],
+              'regclosed' => ['error', 'Registration window is closed for this term.'],
+              'promote_ok' => ['success', 'Student promoted from waitlist to enrolled.'],
+              'promote_full' => ['error', 'Section is full — cannot promote from waitlist.'],
+              'promote_bad' => ['error', 'That enrollment is not waitlisted.'],
           ];
           if ($msg !== '' && isset($banners[$msg])) {
               [$tone, $text] = $banners[$msg];
@@ -2599,7 +3973,7 @@ function nav_item(string $href, string $label, bool $active): string
           ?>
           <h1 class="text-2xl font-semibold text-slate-900">Registration</h1>
           <?php
-          $creditSummary = ['courses' => 0, 'credits' => 0, 'max' => 18];
+          $creditSummary = ['courses' => 0, 'credits' => 0, 'max' => $defaultMaxCredits];
           $enrolledNow = [];
           $waitlistedNow = [];
           $regStudentUser = null;
@@ -2726,6 +4100,7 @@ function nav_item(string $href, string $label, bool $active): string
                   }
               }
           }
+          $regWindowClosed = ($termId !== null && !admin_term_registration_allowed($pdo, $termId));
           ?>
           <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
@@ -2747,6 +4122,12 @@ function nav_item(string $href, string $label, bool $active): string
                 <input type="hidden" name="browse_q" value="<?= htmlspecialchars($browseQ, ENT_QUOTES, 'UTF-8') ?>" />
               <?php endif; ?>
             </form>
+
+            <?php if (!empty($regWindowClosed) && $regStudentId !== null && $termCode !== ''): ?>
+              <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                Registration for <strong class="font-semibold"><?= htmlspecialchars($termCode) ?></strong> is closed or outside the configured window. Administrators can use “Override closed registration window” when adding a section.
+              </div>
+            <?php endif; ?>
 
             <?php if ($regStudentId !== null): ?>
               <?php
@@ -2819,14 +4200,26 @@ function nav_item(string $href, string $label, bool $active): string
                               <td class="px-3 py-2 tabular-nums text-slate-700"><?= (int)($r['credits'] ?? 0) ?></td>
                               <td class="px-3 py-2 text-right">
                                 <?php if ($canRegister): ?>
-                                  <form method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
-                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-                                    <input type="hidden" name="action" value="reg_drop" />
-                                    <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
-                                    <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
-                                    <input type="hidden" name="section_id" value="<?= (int)($r['section_id'] ?? 0) ?>" />
-                                    <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Drop</button>
-                                  </form>
+                                  <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <form method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+                                      <input type="hidden" name="action" value="reg_drop" />
+                                      <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
+                                      <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                                      <input type="hidden" name="section_id" value="<?= (int)($r['section_id'] ?? 0) ?>" />
+                                      <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Drop</button>
+                                    </form>
+                                    <?php if ($st === 'waitlisted' && $isAdmin): ?>
+                                      <form method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+                                        <input type="hidden" name="action" value="reg_promote" />
+                                        <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
+                                        <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                                        <input type="hidden" name="section_id" value="<?= (int)($r['section_id'] ?? 0) ?>" />
+                                        <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500">Promote</button>
+                                      </form>
+                                    <?php endif; ?>
+                                  </div>
                                 <?php else: ?>
                                   <span class="text-xs text-slate-400">—</span>
                                 <?php endif; ?>
@@ -2846,16 +4239,28 @@ function nav_item(string $href, string $label, bool $active): string
                   <p class="mt-1 text-xs text-slate-500">Add by Section ID (fast) or browse available sections for <?= htmlspecialchars($termCode) ?>.</p>
 
                   <?php if ($canRegister): ?>
-                    <form class="mt-4 flex flex-wrap items-end gap-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
-                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-                      <input type="hidden" name="action" value="reg_add" />
-                      <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
-                      <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
-                      <div class="min-w-0 flex-1">
-                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="reg-add-section">Section ID</label>
-                        <input id="reg-add-section" name="section_id" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono" placeholder="e.g. 12031" />
+                    <form class="mt-4 flex flex-col gap-3" method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                      <div class="flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+                        <input type="hidden" name="action" value="reg_add" />
+                        <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
+                        <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
+                        <div class="min-w-0 flex-1">
+                          <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500" for="reg-add-section">Section ID</label>
+                          <input id="reg-add-section" name="section_id" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono" placeholder="e.g. 12031" />
+                        </div>
+                        <button class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Add</button>
                       </div>
-                      <button class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Add</button>
+                      <?php if ($isAdmin): ?>
+                        <details class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                          <summary class="cursor-pointer font-semibold text-slate-800">Administrator overrides</summary>
+                          <div class="mt-2 space-y-2 text-slate-700">
+                            <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" name="override_reg_closed" value="1" /> Closed registration window</label>
+                            <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" name="override_prereq" value="1" /> Prerequisite rule</label>
+                            <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" name="override_credit" value="1" /> Credit-hour limit</label>
+                          </div>
+                        </details>
+                      <?php endif; ?>
                     </form>
                   <?php else: ?>
                     <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Viewer role: you can browse, but cannot add/drop.</div>
@@ -2922,15 +4327,25 @@ function nav_item(string $href, string $label, bool $active): string
                                   <span class="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">WL <?= (int)$br['waitlisted_cnt'] ?></span>
                                 <?php endif; ?>
                               </td>
-                              <td class="px-3 py-2 text-right">
+                              <td class="px-3 py-2 text-right align-top">
                                 <?php if ($canRegister): ?>
-                                  <form method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
+                                  <form class="inline-flex flex-col items-end gap-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=registration&student_id=' . $regStudentId . '&term=' . rawurlencode($termCode) . '&browse_q=' . rawurlencode($browseQ))) ?>">
                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
                                     <input type="hidden" name="action" value="reg_add" />
                                     <input type="hidden" name="student_id" value="<?= (int)$regStudentId ?>" />
                                     <input type="hidden" name="term" value="<?= htmlspecialchars($termCode) ?>" />
                                     <input type="hidden" name="section_id" value="<?= $sid ?>" />
                                     <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">Add</button>
+                                    <?php if ($isAdmin): ?>
+                                      <details class="w-full min-w-[12rem] rounded-lg border border-slate-200 bg-slate-50 p-2 text-left text-[11px]">
+                                        <summary class="cursor-pointer font-semibold text-slate-800">Overrides</summary>
+                                        <div class="mt-2 space-y-1.5 text-slate-700">
+                                          <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" name="override_reg_closed" value="1" /> Closed window</label>
+                                          <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" name="override_prereq" value="1" /> Prereq</label>
+                                          <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" name="override_credit" value="1" /> Credits</label>
+                                        </div>
+                                      </details>
+                                    <?php endif; ?>
                                   </form>
                                 <?php else: ?>
                                   <span class="text-xs text-slate-400">—</span>

@@ -29,7 +29,18 @@ export DB_HOST=127.0.0.1 DB_PORT=3306 DB_NAME=collegeweb DB_USER=… DB_PASS=…
 
 php scripts/migrate.php
 php scripts/import_all.php
+# After import, automatically fills empty course descriptions and infers prerequisite links (same-prefix numbering).
+# To skip that step: SKIP_CATALOG_ENRICH=1 php scripts/import_all.php
+
 php scripts/seed_demo_registration.php
+# Fills terms FA26/SP27/FA27, demo catalog rows (BI0101 chain), sections, and sample enrollments.
+# SQL-only equivalent (after import): mysql … < database/seeds/prefill_course_demo.sql
+
+php scripts/enrich_all_courses.php
+# Optional manual re-run (same as post-import auto-enrich). Use --force to overwrite every description.
+
+php scripts/seed_full_catalog.php
+# One-shot: 5+ realistic courses per dept (BIO, CHE, COM, ECO, ENG, ENGL, HIS, PHI) with descriptions + prereq chains; then fills gaps on other imported courses.
 
 php scripts/seed_superadmin.php mainadmin Main@1234
 php scripts/seed_limited_admin.php limitedadmin Limited@1234

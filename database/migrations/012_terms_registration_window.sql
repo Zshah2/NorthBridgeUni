@@ -1,0 +1,1 @@
+ALTER TABLE terms ADD COLUMN registration_open TINYINT(1) NOT NULL DEFAULT 1 AFTER end_date;

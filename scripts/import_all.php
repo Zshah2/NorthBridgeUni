@@ -449,3 +449,18 @@ try {
     exit(1);
 }
 
+if (getenv('SKIP_CATALOG_ENRICH') === '1') {
+    fwrite(STDOUT, "SKIP_CATALOG_ENRICH=1 — skipping catalog description/prerequisite auto-fill.\n");
+} else {
+    require_once __DIR__ . '/../app/lib/enrich_catalog.php';
+    try {
+        $pdo = db();
+        $stats = enrich_catalog_run($pdo, false);
+        fwrite(
+            STDOUT,
+            "Catalog auto-enrich: {$stats['descriptions']} course description(s) filled, {$stats['prereqs']} prerequisite link(s) added (infer from numbering).\n"
+        );
+    } catch (Throwable $e) {
+        fwrite(STDERR, 'Catalog auto-enrich skipped (non-fatal): ' . $e->getMessage() . "\n");
+    }
+}

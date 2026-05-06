@@ -285,6 +285,19 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     $roster_row_from = $roster_total === 0 ? 0 : (($stu_page - 1) * $schedule_per_page + 1);
     $roster_row_to = min($roster_total, $stu_page * $schedule_per_page);
     $rosterPagesList = $schedulePaginationPages($stu_page, $roster_page_count);
+    $rosterFacNameCounts = [];
+    foreach ($roster_rows as $rr) {
+        if (($rr['roster_kind'] ?? '') !== 'Faculty') {
+            continue;
+        }
+        $ln = strtolower(trim((string)($rr['last_name'] ?? '')));
+        $fn = strtolower(trim((string)($rr['first_name'] ?? '')));
+        $key = $ln . '|' . $fn;
+        if ($ln === '' || $fn === '') {
+            continue;
+        }
+        $rosterFacNameCounts[$key] = ($rosterFacNameCounts[$key] ?? 0) + 1;
+    }
   ?>
   <div class="mt-10 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
     <h2 class="text-lg font-semibold text-slate-900">
@@ -347,7 +360,17 @@ $schedulePaginationPages = static function (int $current, int $last): array {
               <a class="<?= $isFac ? htmlspecialchars($schedule_id_link_faculty, ENT_QUOTES, 'UTF-8') : htmlspecialchars($schedule_id_link_student, ENT_QUOTES, 'UTF-8') ?>" href="<?= htmlspecialchars($idHref) ?>"><?= $uid ?></a>
             </td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)($r['last_name'] ?? '')) ?></td>
-            <td class="px-4 py-3"><?= htmlspecialchars((string)($r['first_name'] ?? '')) ?></td>
+            <td class="px-4 py-3">
+              <?php
+                $first = (string)($r['first_name'] ?? '');
+                $last = (string)($r['last_name'] ?? '');
+                $show = $first;
+                if ($isFac) {
+                    $show = trim($first) . ' #' . $uid;
+                }
+                echo htmlspecialchars($show);
+              ?>
+            </td>
             <td class="px-4 py-3 max-w-[24rem] truncate text-slate-700">
               <?php $dl = trim((string)($r['dept_list'] ?? '')); ?>
               <?= $dl !== '' ? htmlspecialchars($dl) : '—' ?>
@@ -521,6 +544,16 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     $fac_page_count = max(1, (int)ceil($faculty_total / max(1, $schedule_per_page)));
     $fac_row_from = $faculty_total === 0 ? 0 : (($fac_page - 1) * $schedule_per_page + 1);
     $fac_row_to = min($faculty_total, $fac_page * $schedule_per_page);
+    $facNameCounts = [];
+    foreach ($faculty_rows as $fr) {
+        $ln = strtolower(trim((string)($fr['last_name'] ?? '')));
+        $fn = strtolower(trim((string)($fr['first_name'] ?? '')));
+        if ($ln === '' || $fn === '') {
+            continue;
+        }
+        $key = $ln . '|' . $fn;
+        $facNameCounts[$key] = ($facNameCounts[$key] ?? 0) + 1;
+    }
   ?>
   <div class="mt-10 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
     <h2 class="text-lg font-semibold text-slate-900">
@@ -578,7 +611,19 @@ $schedulePaginationPages = static function (int $current, int $last): array {
               <a class="<?= htmlspecialchars($schedule_id_link_faculty, ENT_QUOTES, 'UTF-8') ?>" href="<?= htmlspecialchars($schedule_href_faculty_person((int)$r['faculty_id'])) ?>"><?= (int)$r['faculty_id'] ?></a>
             </td>
             <td class="px-4 py-3"><?= htmlspecialchars((string)$r['last_name']) ?></td>
-            <td class="px-4 py-3"><?= htmlspecialchars((string)$r['first_name']) ?></td>
+            <td class="px-4 py-3">
+              <?php
+                $first = (string)($r['first_name'] ?? '');
+                $last = (string)($r['last_name'] ?? '');
+                $fid = (int)($r['faculty_id'] ?? 0);
+                $k = strtolower(trim($last)) . '|' . strtolower(trim($first));
+                $show = $first;
+                if ($fid > 0) {
+                    $show = trim($first) . ' #' . $fid;
+                }
+                echo htmlspecialchars($show);
+              ?>
+            </td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)($r['middle_name'] ?? '')) ?></td>
             <td class="px-4 py-3 text-slate-600"><?= htmlspecialchars((string)$r['user_type']) ?></td>
             <td class="px-4 py-3 max-w-[28rem] truncate text-slate-700">

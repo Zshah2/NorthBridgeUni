@@ -12,14 +12,17 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial"] },
+            fontFamily: {
+              sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial"],
+              serif: ["Fraunces", "ui-serif", "Georgia", "Cambria", "Times New Roman", "Times", "serif"],
+            },
             colors: {
               brand: {
                 50: "#eff6ff",
@@ -41,8 +44,8 @@
     </script>
     <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/app.css')) ?>" />
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-slate-50">
-    <a class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 ring-1 ring-white/10" href="#main">
+  <body class="bg-[#0a0f1f] text-slate-100 antialiased selection:bg-fuchsia-500/30 selection:text-white">
+    <a class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 rounded-lg bg-violet-950 px-3 py-2 text-sm font-medium text-cyan-100 ring-1 ring-fuchsia-500/40" href="#main">
       Skip to content
     </a>
 

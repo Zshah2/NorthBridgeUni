@@ -1,22 +1,27 @@
 <?php
 /** @var array $app */
 ?>
-<footer id="contact" class="border-t border-white/10 bg-slate-950">
+<footer id="contact" class="border-t border-fuchsia-500/25 bg-[#060914]">
   <div class="mx-auto max-w-6xl px-4 py-10 sm:px-6">
     <div class="grid gap-10 md:grid-cols-12">
       <div class="md:col-span-5">
-        <div class="flex items-center gap-2">
-          <span class="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-semibold text-slate-950">
-            <?= htmlspecialchars(substr($app['site']['shortName'], 0, 2)) ?>
-          </span>
+        <div class="flex items-center gap-3">
+          <img
+            src="<?= htmlspecialchars(url('/assets/img/northbridge_university_icon.svg')) ?>"
+            alt="<?= htmlspecialchars($app['site']['name']) ?>"
+            width="120"
+            height="120"
+            class="h-16 w-16 shrink-0 rounded-3xl object-cover shadow-lg shadow-black/30 ring-1 ring-white/15 sm:h-20 sm:w-20"
+            loading="lazy"
+            decoding="async"
+          />
           <div class="leading-tight">
-            <div class="text-sm font-semibold text-slate-50"><?= htmlspecialchars($app['site']['name']) ?></div>
             <div class="text-xs text-slate-400"><?= htmlspecialchars($app['site']['tagline']) ?></div>
           </div>
         </div>
 
         <p class="mt-4 max-w-md text-sm text-slate-300">
-          A homepage-first build. Next we’ll add MySQL + CSV import and real pages (programs, departments, dashboards).
+          Discover programs, visit campus, and connect with admissions. Explore opportunities built for your goals.
         </p>
 
         <div class="mt-6 space-y-2 text-sm text-slate-300">
@@ -31,37 +36,39 @@
           <div>
             <div class="text-sm font-semibold text-slate-50">Explore</div>
             <ul class="mt-3 space-y-2 text-sm">
-              <li><a class="text-slate-300 hover:text-white" href="#programs">Programs</a></li>
-              <li><a class="text-slate-300 hover:text-white" href="#departments">Departments</a></li>
-              <li><a class="text-slate-300 hover:text-white" href="#news">News</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#programs">Programs</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#departments">Departments</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#news">News</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#events">Events</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#about">About</a></li>
             </ul>
           </div>
           <div>
             <div class="text-sm font-semibold text-slate-50">Admissions</div>
             <ul class="mt-3 space-y-2 text-sm">
-              <li><a class="text-slate-300 hover:text-white" href="#admissions">How to apply</a></li>
-              <li><a class="text-slate-300 hover:text-white" href="#admissions">Tuition & aid</a></li>
-              <li><a class="text-slate-300 hover:text-white" href="#admissions">Visit campus</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#admissions">How to apply</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#admissions">Tuition & aid</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#visit">Visit campus</a></li>
             </ul>
           </div>
           <div>
             <div class="text-sm font-semibold text-slate-50">For students</div>
             <ul class="mt-3 space-y-2 text-sm">
-              <li><a class="text-slate-300 hover:text-white" href="#">Portal (coming soon)</a></li>
-              <li><a class="text-slate-300 hover:text-white" href="#">Academic calendar</a></li>
-              <li><a class="text-slate-300 hover:text-white" href="#">Support services</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#">Student portal</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#">Academic calendar</a></li>
+              <li><a class="text-slate-300 transition-colors hover:text-cyan-300" href="#">Support services</a></li>
             </ul>
           </div>
         </div>
 
-        <div class="mt-10 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div class="mt-10 flex flex-col gap-3 border-t border-fuchsia-500/20 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div class="text-xs text-slate-400">
             © <?= date('Y') ?> <?= htmlspecialchars($app['site']['name']) ?>. All rights reserved.
           </div>
           <div class="flex items-center gap-4 text-xs">
-            <a class="text-slate-400 hover:text-slate-200" href="#">Privacy</a>
-            <a class="text-slate-400 hover:text-slate-200" href="#">Terms</a>
-            <a class="text-slate-400 hover:text-slate-200" href="#">Accessibility</a>
+            <a class="text-slate-400 transition-colors hover:text-fuchsia-300" href="#">Privacy</a>
+            <a class="text-slate-400 transition-colors hover:text-fuchsia-300" href="#">Terms</a>
+            <a class="text-slate-400 transition-colors hover:text-fuchsia-300" href="#">Accessibility</a>
           </div>
         </div>
       </div>
