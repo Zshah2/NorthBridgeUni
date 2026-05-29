@@ -220,7 +220,7 @@ $alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-
     </div>
 
     <p class="relative z-10 mt-8 text-center text-xs text-slate-500 dark:text-slate-500">
-      Demo accounts: see <code class="rounded bg-slate-200/80 px-1 dark:bg-white/10">docs/LOGIN_CREDENTIALS.txt</code>
+      Use credentials provided by your administrator.
     </p>
   </main>
   <script>

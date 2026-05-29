@@ -2,19 +2,15 @@
 
 PHP + MySQL (PDO) + Tailwind. Public site uses the front controller (`public/index.php`); **staff** use **`public/login.php`** and the unified **`public/admin.php`** dashboard.
 
-### Demo logins (after seed scripts)
+### Staff accounts (local only)
 
-| Role | Username | Password |
-|------|-----------|----------|
-| Full admin | `mainadmin` | `Main@1234` |
-| Limited admin | `limitedadmin` | `Limited@1234` |
-| Viewer | `staff` | `Staff@1234` |
+Demo usernames and passwords are **not** stored in this repo. After cloning, copy `docs/LOGIN_CREDENTIALS.txt.example` → `docs/LOGIN_CREDENTIALS.txt` and fill in values for your machine (that file is gitignored).
 
 ### Database credentials
 
 The app reads **`app/config/database.php`**, then merges **`app/config/database.local.php`** if it exists (copy from **`app/config/database.local.php.example`**). Environment variables `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` override the file when set.
 
-If you see **“Cannot connect to MySQL”** on the login page, MySQL may be stopped **or** the username/password does not match (default is `root` with an empty password).
+If you see **“Cannot connect to MySQL”** on the login page, MySQL may be stopped **or** the DB user/password in your local config does not match your server.
 
 ### Setup
 
@@ -45,8 +41,9 @@ php scripts/seed_full_catalog.php
 php scripts/fix_duplicate_course_enrollments.php
 # If two sections of the same course_id (e.g. BIO110) are enrolled/waitlisted for one student in one term, drops extras (keeps enrolled over waitlist, then earliest enrollment_id). Use --dry-run first.
 
-php scripts/seed_superadmin.php mainadmin Main@1234
-php scripts/seed_limited_admin.php limitedadmin Limited@1234
+# Staff portal users — use your own passwords (see docs/LOGIN_CREDENTIALS.txt.example)
+php scripts/seed_superadmin.php <username> <password>
+php scripts/seed_limited_admin.php <username> <password>
 php scripts/seed_staff.php
 
 composer install
@@ -56,7 +53,7 @@ cp app/config/2fa_config.php.example app/config/2fa_config.php
 
 Optional: `APP_DEBUG=1` for verbose errors during development.
 
-Staff sign-in uses **email OTP 2FA** after password (see [docs/LOGIN_CREDENTIALS.txt](docs/LOGIN_CREDENTIALS.txt)).
+Staff sign-in uses **email OTP 2FA** after password (SMTP config in `app/config/2fa_config.php`).
 
 ### URLs
 
@@ -76,6 +73,7 @@ Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 
 - PHP 8+
 - MySQL 8+ (or compatible)
+- [Composer](https://getcomposer.org/) (for PHPMailer / email OTP)
 
 ### Project notes
 

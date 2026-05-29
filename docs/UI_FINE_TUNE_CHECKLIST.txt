@@ -6,7 +6,7 @@ Phase 2 target: public/login.php (staff sign-in) — see section 2.
 
 Related docs:
   docs/PROFESSOR_TEST_CHECKLIST.md  — full setup + demo flows
-  docs/LOGIN_CREDENTIALS.txt          — usernames/passwords for staff portal
+  docs/LOGIN_CREDENTIALS.txt.example  — template; copy to LOGIN_CREDENTIALS.txt (gitignored)
   docs/PROJECT_LOG.md               — dated change log
 
 Status key: [x] done   [ ] todo   [~] partial
