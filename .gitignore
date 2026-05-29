@@ -22,10 +22,6 @@ vendor/
 composer.phar
 composer-setup.php
 
-# Wasmer local cache / build artifacts (optional)
-.wasmer/
-*.webc
-
 # OS / editor temp
 *.swp
 *.swo

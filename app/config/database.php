@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Database settings from environment (Wasmer Edge MYSQL_* or legacy DB_*).
+ * Database settings from environment (DB_* or MYSQL_* on cloud hosts).
  * For local dev, copy database.local.php.example → database.local.php (gitignored).
  * No credentials are hardcoded in this file.
  */
@@ -29,7 +29,7 @@ $applyEnv = static function (string $envKey, string $configKey, bool $asInt = fa
     $setFromEnv[$configKey] = true;
 };
 
-// Wasmer Edge (primary)
+// MYSQL_* (common on some managed platforms)
 $applyEnv('MYSQL_HOST', 'host');
 $applyEnv('MYSQL_PORT', 'port', true);
 $applyEnv('MYSQL_DATABASE', 'database');
@@ -39,7 +39,7 @@ if (getenv('MYSQL_PASSWORD') !== false) {
     $setFromEnv['password'] = true;
 }
 
-// Legacy names (local scripts / older Edge docs) — only if MYSQL_* did not set the field
+// DB_* (DigitalOcean, AWS RDS, local scripts) — only if MYSQL_* did not set the field
 if (!isset($setFromEnv['host'])) {
     $applyEnv('DB_HOST', 'host');
 }

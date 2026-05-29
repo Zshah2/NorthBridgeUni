@@ -8,7 +8,7 @@ Demo usernames and passwords are **not** stored in this repo. After cloning, cop
 
 ### Database credentials
 
-The app connects through **`app/lib/db.php`**. On **Wasmer Edge**, set `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD` (no credentials in code). Locally, copy **`app/config/database.local.php.example`** → **`database.local.php`** or use `DB_*` / `MYSQL_*` env vars.
+The app connects through **`app/lib/db.php`**. On a cloud host, set `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` (and `DB_PORT` if needed) in the platform’s environment variables — or the `MYSQL_*` aliases (see [docs/DEPLOY.md](docs/DEPLOY.md)). Locally, copy **`app/config/database.local.php.example`** → **`database.local.php`**.
 
 If you see **“Cannot connect to MySQL”** on the login page, MySQL may be stopped **or** the DB user/password in your local config does not match your server.
 
@@ -53,7 +53,7 @@ cp app/config/2fa_config.php.example app/config/2fa_config.php
 
 Optional: `APP_DEBUG=1` for verbose errors during development.
 
-Staff sign-in uses **email OTP 2FA** after password (SMTP config in `app/config/2fa_config.php`).
+Staff sign-in uses **email OTP 2FA** after password (`SMTP_*` env vars on cloud hosts, or `app/config/2fa_config.php` locally).
 
 ### URLs
 
@@ -75,9 +75,9 @@ Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 - MySQL 8+ (or compatible)
 - [Composer](https://getcomposer.org/) (for PHPMailer / email OTP)
 
-### Deploy to Wasmer Edge
+### Deploy (DigitalOcean, AWS, VPS)
 
-Hosted deploy (PHP + managed MySQL on Wasmer Edge): see **[docs/WASMER_EDGE.md](docs/WASMER_EDGE.md)**. Quick outline: install the [Wasmer CLI](https://wasmer.io/install), `composer install`, `wasmer login`, then `wasmer deploy` from the project root. No passwords or SMTP secrets belong in git.
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for environment variables (`DB_*`, `SMTP_*`), `composer install`, and `php scripts/migrate.php`. Moving servers: **[docs/MIGRATING_TO_DIFFERENT_SERVER.md](docs/MIGRATING_TO_DIFFERENT_SERVER.md)**.
 
 ### Project notes
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Shared PDO connection (login, admin, scripts, etc.).
- * Cloud (Wasmer/AWS): MYSQL_* or DB_* / DB_USERNAME / DB_PASSWORD env vars.
+ * Cloud (DO/AWS/VPS): DB_* or MYSQL_* env vars (see docs/DEPLOY.md).
  * Local: database.local.php or the same env vars.
  */
 

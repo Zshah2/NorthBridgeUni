@@ -4,8 +4,7 @@
  * Copy this file to database.local.php (same folder) for local MySQL.
  * database.local.php is gitignored — put real credentials only there.
  *
- * On Wasmer Edge, use environment variables instead (no local file):
- *   MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
+ * On cloud hosts, use DB_* or MYSQL_* environment variables instead (see docs/DEPLOY.md).
  *
  * Env vars override this file when set.
  */
