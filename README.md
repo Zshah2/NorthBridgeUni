@@ -8,7 +8,7 @@ Demo usernames and passwords are **not** stored in this repo. After cloning, cop
 
 ### Database credentials
 
-The app reads **`app/config/database.php`**, then merges **`app/config/database.local.php`** if it exists (copy from **`app/config/database.local.php.example`**). Environment variables `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` override the file when set.
+The app connects through **`app/lib/db.php`**. On **Wasmer Edge**, set `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD` (no credentials in code). Locally, copy **`app/config/database.local.php.example`** → **`database.local.php`** or use `DB_*` / `MYSQL_*` env vars.
 
 If you see **“Cannot connect to MySQL”** on the login page, MySQL may be stopped **or** the DB user/password in your local config does not match your server.
 
@@ -74,6 +74,10 @@ Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 - PHP 8+
 - MySQL 8+ (or compatible)
 - [Composer](https://getcomposer.org/) (for PHPMailer / email OTP)
+
+### Deploy to Wasmer Edge
+
+Hosted deploy (PHP + managed MySQL on Wasmer Edge): see **[docs/WASMER_EDGE.md](docs/WASMER_EDGE.md)**. Quick outline: install the [Wasmer CLI](https://wasmer.io/install), `composer install`, `wasmer login`, then `wasmer deploy` from the project root. No passwords or SMTP secrets belong in git.
 
 ### Project notes
 

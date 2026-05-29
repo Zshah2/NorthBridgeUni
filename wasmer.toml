@@ -1,0 +1,19 @@
+[package]
+name = "northbridge-college"
+version = "0.1.0"
+description = "Northbridge College (CollegWeb) PHP application"
+
+[dependencies]
+"php/php" = "8.3"
+
+[fs]
+"/" = "."
+
+[[command]]
+name = "run"
+module = "php/php:php"
+runner = "wasi"
+
+[command.annotations.wasi]
+main-args = ["-t", "/public", "-S", "0.0.0.0:8080", "/public/router.php"]
+env = ["PHPRC=/config/"]

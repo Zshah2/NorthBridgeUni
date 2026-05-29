@@ -118,6 +118,7 @@ $alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-
     <?php if (!$dbOk): ?>
       <div class="<?= htmlspecialchars($alertWarnClass) ?>">
         <strong class="block font-semibold">Cannot connect to MySQL.</strong>
+        <span class="mt-1 block text-amber-900/90 dark:text-amber-100/90"><?= htmlspecialchars(db_connection_help_message()) ?></span>
       </div>
     <?php endif; ?>
 

@@ -17,8 +17,14 @@ docs/LOGIN_CREDENTIALS.txt
 # Logs
 *.log
 
-# PHP dependencies (if added later)
+# PHP dependencies
 vendor/
+composer.phar
+composer-setup.php
+
+# Wasmer local cache / build artifacts (optional)
+.wasmer/
+*.webc
 
 # OS / editor temp
 *.swp

@@ -1,0 +1,17 @@
+kind: wasmer.io/App.v0
+name: northbridge-college
+# Set to your Wasmer.io username before deploy (or accept the deploy prompt).
+owner: zshah2
+package: .
+scaling:
+  mode: single_concurrency
+capabilities:
+  database:
+    engine: mysql
+  locality:
+    regions:
+      - us-socal1
+  instaboot:
+    requests:
+      - path: /
+      - path: /login.php

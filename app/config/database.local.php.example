@@ -1,10 +1,13 @@
 <?php
 
 /**
- * Copy this file to database.local.php (same folder) and set your real credentials.
- * database.local.php is gitignored — safe for local passwords.
+ * Copy this file to database.local.php (same folder) for local MySQL.
+ * database.local.php is gitignored — put real credentials only there.
  *
- * Env vars DB_HOST / DB_USER / DB_PASS etc. still override these if set.
+ * On Wasmer Edge, use environment variables instead (no local file):
+ *   MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
+ *
+ * Env vars override this file when set.
  */
 
 declare(strict_types=1);
@@ -12,7 +15,7 @@ declare(strict_types=1);
 return [
     'host' => '127.0.0.1',
     'port' => 3306,
-    'database' => 'collegeweb',
-    'username' => 'collegeweb',
-    'password' => 'CHANGE_ME',
+    'database' => 'your_database_name',
+    'username' => 'your_database_user',
+    'password' => 'your_database_password',
 ];

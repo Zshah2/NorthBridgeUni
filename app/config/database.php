@@ -1,44 +1,88 @@
 <?php
 
+declare(strict_types=1);
+
+/**
+ * Database settings from environment (Wasmer Edge MYSQL_* or legacy DB_*).
+ * For local dev, copy database.local.php.example → database.local.php (gitignored).
+ * No credentials are hardcoded in this file.
+ */
+
 $config = [
-    'host' => getenv('DB_HOST') ?: '127.0.0.1',
-    'port' => (int)(getenv('DB_PORT') ?: 3306),
-    'database' => getenv('DB_NAME') ?: 'collegeweb',
-    'username' => getenv('DB_USER') ?: 'root',
-    'password' => getenv('DB_PASS') !== false ? (string)getenv('DB_PASS') : '',
+    'host' => '',
+    'port' => 3306,
+    'database' => '',
+    'username' => '',
+    'password' => '',
     'charset' => 'utf8mb4',
 ];
+
+/** @var array<string, true> */
+$setFromEnv = [];
+
+$applyEnv = static function (string $envKey, string $configKey, bool $asInt = false) use (&$config, &$setFromEnv): void {
+    $raw = getenv($envKey);
+    if ($raw === false || $raw === '') {
+        return;
+    }
+    $config[$configKey] = $asInt ? (int)$raw : (string)$raw;
+    $setFromEnv[$configKey] = true;
+};
+
+// Wasmer Edge (primary)
+$applyEnv('MYSQL_HOST', 'host');
+$applyEnv('MYSQL_PORT', 'port', true);
+$applyEnv('MYSQL_DATABASE', 'database');
+$applyEnv('MYSQL_USER', 'username');
+if (getenv('MYSQL_PASSWORD') !== false) {
+    $config['password'] = (string)getenv('MYSQL_PASSWORD');
+    $setFromEnv['password'] = true;
+}
+
+// Legacy names (local scripts / older Edge docs) — only if MYSQL_* did not set the field
+if (!isset($setFromEnv['host'])) {
+    $applyEnv('DB_HOST', 'host');
+}
+if (!isset($setFromEnv['port'])) {
+    $applyEnv('DB_PORT', 'port', true);
+}
+if (!isset($setFromEnv['database'])) {
+    $applyEnv('DB_NAME', 'database');
+}
+if (!isset($setFromEnv['username'])) {
+    $applyEnv('DB_USER', 'username');
+    if (!isset($setFromEnv['username'])) {
+        $applyEnv('DB_USERNAME', 'username');
+    }
+}
+if (!isset($setFromEnv['password'])) {
+    if (getenv('DB_PASS') !== false) {
+        $config['password'] = (string)getenv('DB_PASS');
+        $setFromEnv['password'] = true;
+    } elseif (getenv('DB_PASSWORD') !== false) {
+        $config['password'] = (string)getenv('DB_PASSWORD');
+        $setFromEnv['password'] = true;
+    }
+}
 
 $localPath = __DIR__ . '/database.local.php';
 if (is_file($localPath)) {
     $local = require $localPath;
     if (is_array($local)) {
         foreach ($local as $key => $value) {
-            if ($key === 'port') {
-                $config['port'] = (int)$value;
-
+            if (!array_key_exists($key, $config)) {
                 continue;
             }
-            $config[$key] = $value;
+            if (isset($setFromEnv[$key])) {
+                continue;
+            }
+            if ($key === 'port') {
+                $config['port'] = (int)$value;
+            } else {
+                $config[$key] = $value;
+            }
         }
     }
-}
-
-// Env wins over file (easy override in PhpStorm run config)
-if (getenv('DB_HOST') !== false) {
-    $config['host'] = (string)getenv('DB_HOST');
-}
-if (getenv('DB_PORT') !== false) {
-    $config['port'] = (int)getenv('DB_PORT');
-}
-if (getenv('DB_NAME') !== false) {
-    $config['database'] = (string)getenv('DB_NAME');
-}
-if (getenv('DB_USER') !== false) {
-    $config['username'] = (string)getenv('DB_USER');
-}
-if (getenv('DB_PASS') !== false) {
-    $config['password'] = (string)getenv('DB_PASS');
 }
 
 return $config;
