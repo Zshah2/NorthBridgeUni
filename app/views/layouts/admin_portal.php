@@ -16,28 +16,37 @@ $docTitle = isset($pageTitle) && is_string($pageTitle) && $pageTitle !== ''
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($docTitle) ?></title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
-  <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } } };</script>
+  <?php require view_path('partials/theme_init.php'); ?>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } },
+    };
+  </script>
+  <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/theme.css')) ?>" />
 </head>
-<body class="min-h-full bg-slate-50 font-sans text-slate-900 antialiased">
-  <header class="relative border-b border-slate-200 bg-white/80 backdrop-blur">
+<body class="nb-staff min-h-full bg-slate-50 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+  <header class="relative border-b border-slate-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-slate-950/80">
     <div class="mx-auto flex max-w-[min(100vw-2rem,96rem)] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
       <div class="flex items-center gap-3">
         <span class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white">NB</span>
         <div>
-          <div class="text-sm font-semibold text-slate-900">Northbridge Admin</div>
-          <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div class="text-sm font-semibold text-slate-900 dark:text-white">Northbridge Admin</div>
+          <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span><?= htmlspecialchars($admin_username ?? '') ?></span>
-            <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700"><?= htmlspecialchars($admin_role_label ?? '') ?></span>
+            <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"><?= htmlspecialchars($admin_role_label ?? '') ?></span>
           </div>
         </div>
       </div>
       <div class="flex items-center gap-3">
-        <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm text-slate-600 hover:text-slate-900">Site home</a>
+        <?php require view_path('partials/theme_toggle.php'); ?>
+
+        <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Site home</a>
         <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf ?? '') ?>" />
-          <button type="submit" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Log out</button>
+          <button type="submit" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10">Log out</button>
         </form>
       </div>
     </div>
@@ -109,5 +118,7 @@ $docTitle = isset($pageTitle) && is_string($pageTitle) && $pageTitle !== ''
     });
   })();
   </script>
+
+  <?php require view_path('partials/theme_boot.php'); ?>
 </body>
 </html>

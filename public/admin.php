@@ -829,6 +829,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         exit;
     }
 
+    if ($action === 'auth_email_save' && $isAdmin) {
+        $aid = isset($_POST['auth_id']) && ctype_digit((string)$_POST['auth_id']) ? (int)$_POST['auth_id'] : null;
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
+        if ($aid === null || $aid < 1) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=invalid'));
+            exit;
+        }
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=email_invalid'));
+            exit;
+        }
+        try {
+            $pdo->prepare('UPDATE auth_users SET email = ? WHERE id = ?')->execute([$email === '' ? null : $email, $aid]);
+        } catch (Throwable) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=email_failed'));
+            exit;
+        }
+        admin_audit($pdo, 'auth_email_save', 'id=' . $aid);
+        header('Location: ' . url('/admin.php?view=accounts&msg=email_saved'));
+        exit;
+    }
+
     if ($action === 'reg_promote' && $canRegister && $isAdmin) {
         $studentId = isset($_POST['student_id']) && ctype_digit((string)$_POST['student_id']) ? (int)$_POST['student_id'] : null;
         $sectionId = isset($_POST['section_id']) && ctype_digit((string)$_POST['section_id']) ? (int)$_POST['section_id'] : null;
@@ -1423,8 +1445,8 @@ function admin_enrollment_badge_classes(string $status): string
 function nav_item(string $href, string $label, bool $active): string
 {
     $cls = $active
-        ? 'block rounded-xl px-3 py-2 font-semibold text-indigo-950 bg-indigo-50 ring-1 ring-indigo-200'
-        : 'block rounded-xl px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100';
+        ? 'block rounded-xl px-3 py-2 font-semibold text-indigo-950 bg-indigo-50 ring-1 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-100 dark:ring-indigo-500/30'
+        : 'block rounded-xl px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5';
 
     return '<a class="' . $cls . '" href="' . htmlspecialchars($href) . '">' . htmlspecialchars($label) . '</a>';
 }
@@ -1432,7 +1454,7 @@ function nav_item(string $href, string $label, bool $active): string
 /** Non-clickable sidebar subsection title (separates directory vs courses, etc.). */
 function nav_group_label(string $label): string
 {
-    return '<div class="pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">' . htmlspecialchars($label) . '</div>';
+    return '<div class="pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">' . htmlspecialchars($label) . '</div>';
 }
 
 ?>
@@ -1442,9 +1464,16 @@ function nav_group_label(string $label): string
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($pageTitle) ?></title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
-  <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } } };</script>
+  <?php require __DIR__ . '/../app/views/partials/theme_init.php'; ?>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } },
+    };
+  </script>
+  <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/theme.css')) ?>" />
   <style>
     @media (min-width: 1024px) {
       html.admin-nav-collapsed #adminSidebar {
@@ -1459,8 +1488,8 @@ function nav_group_label(string $label): string
     }
   </style>
 </head>
-<body class="min-h-full bg-slate-50 font-sans text-slate-900 antialiased">
-  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+<body class="nb-staff min-h-full bg-slate-50 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
     <div class="mx-auto max-w-[min(100vw-2rem,110rem)] px-3 py-3 sm:px-5">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
         <div class="flex min-w-0 flex-1 items-center justify-between gap-3 lg:justify-start lg:gap-4">
@@ -1470,18 +1499,18 @@ function nav_group_label(string $label): string
               alt=""
               width="40"
               height="40"
-              class="h-10 w-10 shrink-0 rounded-xl ring-1 ring-slate-200"
+              class="h-10 w-10 shrink-0 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700"
             />
             <div class="min-w-0">
-              <div class="truncate text-sm font-semibold text-slate-900">Northbridge Admin</div>
-              <div class="text-[11px] text-slate-500">Staff dashboard</div>
+              <div class="truncate text-sm font-semibold text-slate-900 dark:text-white">Northbridge Admin</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400">Staff dashboard</div>
             </div>
           </a>
           <div class="flex items-center gap-2 lg:hidden">
             <button
               type="button"
               id="adminMenuButton"
-              class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
               aria-haspopup="dialog"
               aria-controls="adminMenuDrawer"
               aria-expanded="false"
@@ -1503,16 +1532,17 @@ function nav_group_label(string $label): string
             type="search"
             name="q"
             placeholder="Search people, courses, email…"
-            class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+            class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
             autocomplete="off"
           />
           <button type="submit" class="shrink-0 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Search</button>
         </form>
 
         <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <?php require __DIR__ . '/../app/views/partials/theme_toggle.php'; ?>
           <a
             href="<?= htmlspecialchars(url('/admin.php?view=dashboard#admin-alerts')) ?>"
-            class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+            class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             title="Alerts and items needing attention"
           >
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1523,18 +1553,18 @@ function nav_group_label(string $label): string
             <?php endif; ?>
           </a>
 
-          <div class="flex max-w-[14rem] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2 py-1.5">
+          <div class="flex max-w-[14rem] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900/80">
             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-600 to-sky-600 text-xs font-bold text-white"><?= htmlspecialchars($adminUserInitials) ?></span>
             <div class="min-w-0">
-              <div class="truncate text-xs font-semibold text-slate-900"><?= htmlspecialchars($user !== '' ? $user : 'Admin') ?></div>
-              <div class="truncate text-[10px] text-slate-500"><?= htmlspecialchars($roleLabel) ?></div>
+              <div class="truncate text-xs font-semibold text-slate-900 dark:text-slate-100"><?= htmlspecialchars($user !== '' ? $user : 'Admin') ?></div>
+              <div class="truncate text-[10px] text-slate-500 dark:text-slate-400"><?= htmlspecialchars($roleLabel) ?></div>
             </div>
           </div>
 
           <button
             type="button"
             id="adminSidebarToggle"
-            class="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:inline-flex"
+            class="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 lg:inline-flex"
             aria-controls="adminSidebar"
             aria-expanded="true"
             title="Hide sidebar"
@@ -1542,10 +1572,10 @@ function nav_group_label(string $label): string
             Hide
           </button>
 
-          <a href="<?= htmlspecialchars(url('/')) ?>" class="hidden text-sm font-medium text-slate-600 hover:text-slate-900 sm:inline">Site home</a>
+          <a href="<?= htmlspecialchars(url('/')) ?>" class="hidden text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white sm:inline">Site home</a>
           <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="inline">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-            <button type="submit" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Log out</button>
+            <button type="submit" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">Log out</button>
           </form>
         </div>
       </div>
@@ -1553,14 +1583,14 @@ function nav_group_label(string $label): string
   </header>
 
   <div id="adminMenuBackdrop" class="fixed inset-0 z-40 hidden bg-slate-950/40 backdrop-blur-[1px] lg:hidden"></div>
-  <div id="adminMenuDrawer" class="fixed right-0 top-0 z-50 hidden h-full w-[min(92vw,22rem)] border-l border-slate-200 bg-white shadow-xl lg:hidden">
+  <div id="adminMenuDrawer" class="fixed right-0 top-0 z-50 hidden h-full w-[min(92vw,22rem)] border-l border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900 lg:hidden">
     <div class="flex h-full flex-col">
-      <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+      <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
         <div>
-          <div class="text-sm font-semibold text-slate-900">Menu</div>
-          <div class="mt-0.5 text-xs text-slate-500">Northbridge Admin</div>
+          <div class="text-sm font-semibold text-slate-900 dark:text-white">Menu</div>
+          <div class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Northbridge Admin</div>
         </div>
-        <button type="button" id="adminMenuClose" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+        <button type="button" id="adminMenuClose" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
           Close
         </button>
       </div>
@@ -1641,7 +1671,7 @@ function nav_group_label(string $label): string
     }
     ?>
     <div class="min-w-0">
-      <aside id="adminSidebar" class="fixed left-0 top-[6.25rem] z-20 hidden h-[calc(100vh-6.25rem)] w-[18rem] overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-200 ease-out lg:block lg:top-[5.5rem] lg:h-[calc(100vh-5.5rem)]">
+      <aside id="adminSidebar" class="fixed left-0 top-[6.25rem] z-20 hidden h-[calc(100vh-6.25rem)] w-[18rem] overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-200 ease-out dark:border-slate-800 dark:bg-slate-900 lg:block lg:top-[5.5rem] lg:h-[calc(100vh-5.5rem)]">
         <div class="pr-1">
           <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
           <nav class="mt-4 space-y-1 text-sm">
@@ -1693,7 +1723,7 @@ function nav_group_label(string $label): string
             </div>
             <div class="flex flex-wrap gap-2">
               <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
-              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
+              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>" title="Look up holds for one student by ID">Student hold lookup</a>
             </div>
           </div>
 
@@ -1703,7 +1733,7 @@ function nav_group_label(string $label): string
               <div class="flex flex-wrap gap-2 text-xs">
                 <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%40northbridge.edu')) ?>">Email gaps (<?= (int)($dash['students_missing_email'] ?? 0) + (int)($dash['faculty_missing_email'] ?? 0) ?>)</a>
                 <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Phone checks (<?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?>)</a>
-                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Active holds (<?= (int)$counts['holds_active'] ?>)</a>
+                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" title="Open the full list of active registration holds" href="<?= htmlspecialchars(url('/admin.php?view=holds#admin-active-holds-list')) ?>">Active holds (<?= (int)$counts['holds_active'] ?>)</a>
               </div>
             </div>
             <p class="mt-2 text-xs text-amber-900/90">Tip: use the header search to open <strong class="font-semibold">Master schedule</strong> with your query — fastest way to find people by ID, name, email, or phone.</p>
@@ -1932,9 +1962,11 @@ function nav_group_label(string $label): string
                   <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Check phone formatting</a>
                   <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"><?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?></span>
                 </li>
-                <li class="flex items-center justify-between gap-3">
-                  <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=holds')) ?>">Active holds</a>
-                  <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"><?= (int)$counts['holds_active'] ?></span>
+                <li>
+                  <a class="flex items-center justify-between gap-3 rounded-xl px-2 py-2 -mx-2 text-sm font-semibold text-indigo-700 hover:bg-slate-50 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=holds#admin-active-holds-list')) ?>">
+                    <span>Active holds</span>
+                    <span class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"><?= (int)$counts['holds_active'] ?></span>
+                  </a>
                 </li>
               </ul>
               <p class="mt-4 text-xs text-slate-500"><strong class="font-semibold text-slate-700">Exam season / approvals:</strong> wire calendar milestones here when you add workflow tables.</p>
@@ -2217,7 +2249,7 @@ function nav_group_label(string $label): string
               $holdRows = $pdo->query('
                 SELECT h.student_id, h.hold_type, h.note, h.created_at, u.first_name, u.last_name
                 FROM student_holds h
-                INNER JOIN users u ON u.user_id = h.student_id
+                LEFT JOIN users u ON u.user_id = h.student_id
                 WHERE h.is_active = 1
                 ORDER BY h.created_at DESC
                 LIMIT 500
@@ -2241,6 +2273,9 @@ function nav_group_label(string $label): string
                 'self_not_allowed' => ['error', 'You cannot deactivate your own account.'],
                 'invalid' => ['error', 'Invalid request.'],
                 'active_failed' => ['error', 'Could not update — ensure auth_users.is_active exists (run migrations).'],
+                'email_saved' => ['success', 'Email updated.'],
+                'email_invalid' => ['error', 'Enter a valid email address or leave blank.'],
+                'email_failed' => ['error', 'Could not save email — run migrations (auth_users.email).'],
             ];
             if ($acctFlash !== '' && isset($acctFlashMap[$acctFlash])) {
                 [$at, $atxt] = $acctFlashMap[$acctFlash];
@@ -2249,11 +2284,18 @@ function nav_group_label(string $label): string
             }
             $authRows = [];
             try {
-                $authRows = $pdo->query('SELECT id, username, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $authRows = $pdo->query('SELECT id, username, email, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
             } catch (Throwable) {
-                $authRows = $pdo->query('SELECT id, username, role FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                try {
+                    $authRows = $pdo->query('SELECT id, username, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (Throwable) {
+                    $authRows = $pdo->query('SELECT id, username, role FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                }
                 foreach ($authRows as &$ar) {
                     $ar['is_active'] = 1;
+                    if (!array_key_exists('email', $ar)) {
+                        $ar['email'] = null;
+                    }
                 }
                 unset($ar);
             }
@@ -4440,5 +4482,6 @@ function nav_group_label(string $label): string
       });
     })();
   </script>
+  <?php require __DIR__ . '/../app/views/partials/theme_boot.php'; ?>
 </body>
 </html>

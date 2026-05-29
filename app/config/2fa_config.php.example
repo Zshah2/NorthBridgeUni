@@ -1,0 +1,18 @@
+<?php
+
+/**
+ * Copy to 2fa_config.php (same folder). 2fa_config.php is gitignored.
+ */
+
+declare(strict_types=1);
+
+return [
+    'smtp_host' => 'smtp.example.edu',
+    'smtp_port' => 587,
+    'smtp_encryption' => 'tls', // tls, ssl, or empty string for none
+    'smtp_username' => 'your-smtp-user',
+    'smtp_password' => 'CHANGE_ME',
+    'from_email' => 'noreply@example.edu',
+    'from_name' => 'Northbridge College Admin',
+    'otp_expiry_minutes' => 5,
+];

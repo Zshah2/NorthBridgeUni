@@ -6,13 +6,14 @@ $authRows = $authRows ?? [];
 $currentAuthId = (int)($currentAuthId ?? 0);
 ?>
 <h1 class="text-2xl font-semibold text-slate-900">Staff accounts</h1>
-<p class="mt-2 text-sm text-slate-600">Portal users for this admin site. Reset passwords and deactivate access (cannot deactivate your own account).</p>
+<p class="mt-2 text-sm text-slate-600">Portal users for this admin site. Set each user’s email for sign-in verification (2FA). Reset passwords and deactivate access (cannot deactivate your own account).</p>
 
 <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
   <table class="min-w-full text-left text-sm">
     <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
       <tr>
         <th class="px-4 py-3">User</th>
+        <th class="px-4 py-3">Email (2FA)</th>
         <th class="px-4 py-3">Role</th>
         <th class="px-4 py-3">Active</th>
         <th class="px-4 py-3"></th>
@@ -26,6 +27,22 @@ $currentAuthId = (int)($currentAuthId ?? 0);
         ?>
         <tr class="hover:bg-slate-50/70">
           <td class="px-4 py-3 font-medium"><?= htmlspecialchars((string)($a['username'] ?? '')) ?></td>
+          <td class="px-4 py-3">
+            <form class="flex flex-wrap items-center gap-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=accounts')) ?>">
+              <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
+              <input type="hidden" name="action" value="auth_email_save" />
+              <input type="hidden" name="auth_id" value="<?= $aid ?>" />
+              <input
+                type="email"
+                name="email"
+                value="<?= htmlspecialchars((string)($a['email'] ?? '')) ?>"
+                placeholder="name@example.edu"
+                autocomplete="email"
+                class="min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+              />
+              <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50">Save email</button>
+            </form>
+          </td>
           <td class="px-4 py-3"><?= htmlspecialchars((string)($a['role'] ?? '')) ?></td>
           <td class="px-4 py-3"><?= ((int)($a['is_active'] ?? 1) === 1) ? 'Yes' : 'No' ?></td>
           <td class="px-4 py-3">

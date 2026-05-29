@@ -8,6 +8,9 @@
 # Local DB overrides (copy from database.local.php.example)
 app/config/database.local.php
 
+# SMTP / 2FA (copy from 2fa_config.php.example)
+app/config/2fa_config.php
+
 # Logs
 *.log
 

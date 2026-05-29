@@ -1,0 +1,11 @@
+{
+    "name": "collegeweb/app",
+    "description": "Northbridge College web application",
+    "require": {
+        "php": ">=8.1",
+        "phpmailer/phpmailer": "^6.9"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

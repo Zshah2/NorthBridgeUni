@@ -42,12 +42,21 @@ php scripts/enrich_all_courses.php
 php scripts/seed_full_catalog.php
 # One-shot: 5+ realistic courses per dept (BIO, CHE, COM, ECO, ENG, ENGL, HIS, PHI) with descriptions + prereq chains; then fills gaps on other imported courses.
 
+php scripts/fix_duplicate_course_enrollments.php
+# If two sections of the same course_id (e.g. BIO110) are enrolled/waitlisted for one student in one term, drops extras (keeps enrolled over waitlist, then earliest enrollment_id). Use --dry-run first.
+
 php scripts/seed_superadmin.php mainadmin Main@1234
 php scripts/seed_limited_admin.php limitedadmin Limited@1234
 php scripts/seed_staff.php
+
+composer install
+cp app/config/2fa_config.php.example app/config/2fa_config.php
+# Edit 2fa_config.php (SMTP). Set staff emails in Admin → Accounts for email OTP 2FA on login.
 ```
 
 Optional: `APP_DEBUG=1` for verbose errors during development.
+
+Staff sign-in uses **email OTP 2FA** after password (see [docs/LOGIN_CREDENTIALS.txt](docs/LOGIN_CREDENTIALS.txt)).
 
 ### URLs
 
@@ -71,4 +80,5 @@ Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 ### Project notes
 
 - Department emails in `storage/import/department.csv` use `@northbridge.edu`; re-run `import_all.php` after edits.
-- Older checklists: [docs/PROFESSOR_TEST_CHECKLIST.md](docs/PROFESSOR_TEST_CHECKLIST.md) if present.
+- UI polish backlog: [docs/UI_FINE_TUNE_CHECKLIST.txt](docs/UI_FINE_TUNE_CHECKLIST.txt)
+- Grader checklist: [docs/PROFESSOR_TEST_CHECKLIST.md](docs/PROFESSOR_TEST_CHECKLIST.md)

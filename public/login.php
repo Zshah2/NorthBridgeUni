@@ -8,6 +8,7 @@ bootstrap_app();
 require __DIR__ . '/../app/lib/url.php';
 require __DIR__ . '/../app/lib/db.php';
 require __DIR__ . '/../app/lib/auth.php';
+require __DIR__ . '/../app/lib/two_factor.php';
 require __DIR__ . '/../app/lib/csrf.php';
 
 header('Content-Type: text/html; charset=utf-8');
@@ -43,9 +44,21 @@ if ($isPost && $dbOk) {
             $p = (string)($_POST['password'] ?? '');
             if ($u === '' || $p === '') {
                 $loginError = 'Enter username and password.';
-            } elseif (auth_login_portal_user($u, $p)) {
-                header('Location: ' . url('/admin.php'));
-                exit;
+            } elseif (($row = auth_verify_portal_credentials($u, $p)) !== null) {
+                $pdo = db();
+                $email = trim((string)($row['email'] ?? ''));
+                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $loginError = 'No valid email on file for this account. Ask an admin to set your email under Accounts.';
+                } else {
+                    [$sent, $mailErr] = twofa_issue_and_send($pdo, $email);
+                    if (!$sent) {
+                        $loginError = $mailErr ?? 'Could not send verification code.';
+                    } else {
+                        auth_begin_pending_2fa($row);
+                        header('Location: ' . url('/verify_otp.php'));
+                        exit;
+                    }
+                }
             } else {
                 $loginError = 'Invalid username or password.';
             }
@@ -84,6 +97,11 @@ $initialRegister = $registerError !== null
     || (isset($_GET['register']) && (string)$_GET['register'] !== '0');
 
 $pageTitle = 'Staff sign in — Northbridge College';
+
+$inputClass = 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-400/20 dark:border-white/10 dark:bg-slate-950/50 dark:text-white dark:placeholder:text-slate-500';
+$alertSuccessClass = 'mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100';
+$alertErrorClass = 'mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100';
+$alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100';
 ?>
 <!DOCTYPE html>
 <html lang="en" class="h-full">
@@ -91,92 +109,119 @@ $pageTitle = 'Staff sign in — Northbridge College';
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($pageTitle) ?></title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
-  <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } } };</script>
+  <?php require __DIR__ . '/../app/views/partials/theme_init.php'; ?>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] } } } },
+    };
+  </script>
+  <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/theme.css')) ?>" />
 </head>
-<body class="min-h-full bg-slate-950 font-sans text-slate-100 antialiased">
+<body class="nb-staff min-h-full bg-slate-50 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
   <div class="pointer-events-none fixed inset-0" aria-hidden="true">
-    <div class="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-sky-600/20 blur-3xl"></div>
+    <div class="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-sky-400/25 blur-3xl dark:bg-sky-600/20"></div>
+    <div class="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-indigo-400/15 blur-3xl dark:bg-indigo-600/10"></div>
   </div>
 
-  <header class="relative z-10 border-b border-white/10 bg-slate-950/80 backdrop-blur">
-    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-      <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm text-slate-400 hover:text-white">← Site home</a>
+  <header class="relative z-10 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-slate-950/80">
+    <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">← Site home</a>
+      <?php require __DIR__ . '/../app/views/partials/theme_toggle.php'; ?>
     </div>
   </header>
 
   <main class="relative z-10 mx-auto max-w-md px-4 py-10 sm:px-6">
     <?php if (!$dbOk): ?>
-      <div class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-        <strong class="block text-amber-50">Cannot connect to MySQL.</strong>
-        Start MySQL, create the DB, copy <code class="rounded bg-black/30 px-1 text-xs">app/config/database.local.php.example</code> → <code class="rounded bg-black/30 px-1 text-xs">database.local.php</code> with your user/password, then run <code class="rounded bg-black/30 px-1 text-xs">php scripts/migrate.php</code>.
+      <div class="<?= htmlspecialchars($alertWarnClass) ?>">
+        <strong class="block font-semibold">Cannot connect to MySQL.</strong>
+        <span class="mt-1 block text-amber-900/90 dark:text-amber-100/90">Start MySQL, copy <code class="rounded bg-amber-100 px-1 text-xs dark:bg-black/30">app/config/database.local.php.example</code> → <code class="rounded bg-amber-100 px-1 text-xs dark:bg-black/30">database.local.php</code>, then run <code class="rounded bg-amber-100 px-1 text-xs dark:bg-black/30">php scripts/migrate.php</code>.</span>
       </div>
     <?php endif; ?>
 
-    <div id="panelLogin" class="rounded-3xl border border-white/10 bg-white/[0.05] p-8 shadow-xl <?= $initialRegister ? 'hidden' : '' ?>">
+    <div id="panelLogin" class="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 dark:border-white/10 dark:bg-slate-900/90 dark:shadow-black/30 <?= $initialRegister ? 'hidden' : '' ?>">
       <div class="text-center">
-        <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-500 text-lg font-bold text-slate-950">NB</div>
-        <h1 class="mt-4 text-2xl font-semibold text-white">Northbridge College</h1>
-        <p class="mt-1 text-sm text-slate-400">Staff portal</p>
+        <img
+          src="<?= htmlspecialchars(url('/assets/img/northbridge_university_icon.svg')) ?>"
+          alt="Northbridge College"
+          width="56"
+          height="56"
+          class="mx-auto h-14 w-14 rounded-2xl object-cover ring-1 ring-slate-200 dark:ring-white/15"
+        />
+        <h1 class="mt-4 text-2xl font-semibold text-slate-900 dark:text-white">Northbridge College</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Staff portal</p>
       </div>
       <?php if ($registered): ?>
-        <div class="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">Account created. Sign in below.</div>
+        <div class="<?= htmlspecialchars($alertSuccessClass) ?>">Account created. Sign in below.</div>
       <?php endif; ?>
       <?php if ($loginError): ?>
-        <div class="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100"><?= htmlspecialchars($loginError) ?></div>
+        <div class="<?= htmlspecialchars($alertErrorClass) ?>"><?= htmlspecialchars($loginError) ?></div>
       <?php endif; ?>
       <form class="mt-6 space-y-4" method="post" action="<?= htmlspecialchars(url('/login.php')) ?>" autocomplete="on">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
         <input type="hidden" name="intent" value="login" />
         <div>
-          <label class="text-sm font-medium text-slate-300" for="username">Username</label>
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="username">Username</label>
           <input id="username" name="username" type="text" autocomplete="username" required
-            class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-400/20"
+            class="<?= htmlspecialchars($inputClass) ?>"
             placeholder="Username" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
         <div>
-          <label class="text-sm font-medium text-slate-300" for="password">Password</label>
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="password">Password</label>
           <input id="password" name="password" type="password" autocomplete="current-password" required
-            class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-400/20"
+            class="<?= htmlspecialchars($inputClass) ?>"
             placeholder="Password" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
-        <button type="submit" class="w-full rounded-xl bg-sky-500 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-50" <?= $dbOk ? '' : 'disabled' ?>>Sign in</button>
+        <button type="submit" class="w-full rounded-xl bg-sky-500 py-3 text-sm font-semibold text-slate-950 shadow-sm hover:bg-sky-400 disabled:opacity-50 dark:shadow-sky-900/20" <?= $dbOk ? '' : 'disabled' ?>>Sign in</button>
       </form>
-      <p class="mt-6 text-center text-sm text-slate-400">
-        No account? <button type="button" id="btnShowRegister" class="font-semibold text-sky-300 hover:text-sky-200">Register</button>
+      <p class="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
+        No account? <button type="button" id="btnShowRegister" class="font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200">Register</button>
       </p>
     </div>
 
-    <div id="panelRegister" class="rounded-3xl border border-white/10 bg-white/[0.05] p-8 shadow-xl <?= $initialRegister ? '' : 'hidden' ?>">
+    <div id="panelRegister" class="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 dark:border-white/10 dark:bg-slate-900/90 dark:shadow-black/30 <?= $initialRegister ? '' : 'hidden' ?>">
       <div class="text-center">
-        <h2 class="text-xl font-semibold text-white">Create admin account</h2>
-        <p class="mt-1 text-sm text-slate-400">Full admin role (seed other roles via scripts).</p>
+        <img
+          src="<?= htmlspecialchars(url('/assets/img/northbridge_university_icon.svg')) ?>"
+          alt=""
+          width="48"
+          height="48"
+          class="mx-auto h-12 w-12 rounded-2xl object-cover ring-1 ring-slate-200 dark:ring-white/15"
+          aria-hidden="true"
+        />
+        <h2 class="mt-3 text-xl font-semibold text-slate-900 dark:text-white">Create admin account</h2>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Full admin role (seed other roles via scripts).</p>
       </div>
       <?php if ($registerError): ?>
-        <div class="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100"><?= htmlspecialchars($registerError) ?></div>
+        <div class="<?= htmlspecialchars($alertErrorClass) ?>"><?= htmlspecialchars($registerError) ?></div>
       <?php endif; ?>
       <form class="mt-6 space-y-4" method="post" action="<?= htmlspecialchars(url('/login.php?view=register')) ?>" autocomplete="on">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
         <input type="hidden" name="intent" value="register" />
         <div>
-          <label class="text-sm font-medium text-slate-300" for="reg_username">Username</label>
-          <input id="reg_username" name="username" type="text" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-white" <?= $dbOk ? '' : 'disabled' ?> />
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="reg_username">Username</label>
+          <input id="reg_username" name="username" type="text" required class="<?= htmlspecialchars($inputClass) ?>" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
         <div>
-          <label class="text-sm font-medium text-slate-300" for="reg_password">Password</label>
-          <input id="reg_password" name="password" type="password" minlength="8" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-white" <?= $dbOk ? '' : 'disabled' ?> />
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="reg_password">Password</label>
+          <input id="reg_password" name="password" type="password" minlength="8" required class="<?= htmlspecialchars($inputClass) ?>" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
         <div>
-          <label class="text-sm font-medium text-slate-300" for="reg_confirm">Confirm</label>
-          <input id="reg_confirm" name="confirm_password" type="password" minlength="8" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-white" <?= $dbOk ? '' : 'disabled' ?> />
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="reg_confirm">Confirm password</label>
+          <input id="reg_confirm" name="confirm_password" type="password" minlength="8" required class="<?= htmlspecialchars($inputClass) ?>" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
-        <button type="submit" class="w-full rounded-xl border border-sky-400/40 bg-sky-500/15 py-3 text-sm font-semibold text-sky-100 hover:bg-sky-500/25" <?= $dbOk ? '' : 'disabled' ?>>Create account</button>
+        <button type="submit" class="w-full rounded-xl bg-sky-500 py-3 text-sm font-semibold text-slate-950 shadow-sm hover:bg-sky-400 disabled:opacity-50 dark:shadow-sky-900/20" <?= $dbOk ? '' : 'disabled' ?>>Create account</button>
       </form>
-      <p class="mt-6 text-center text-sm text-slate-400">
-        Have an account? <button type="button" id="btnShowLogin" class="font-semibold text-sky-300 hover:text-sky-200">Sign in</button>
+      <p class="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
+        Have an account? <button type="button" id="btnShowLogin" class="font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200">Sign in</button>
       </p>
     </div>
+
+    <p class="relative z-10 mt-8 text-center text-xs text-slate-500 dark:text-slate-500">
+      Demo accounts: see <code class="rounded bg-slate-200/80 px-1 dark:bg-white/10">docs/LOGIN_CREDENTIALS.txt</code>
+    </p>
   </main>
   <script>
     (function () {
@@ -195,5 +240,6 @@ $pageTitle = 'Staff sign in — Northbridge College';
       });
     })();
   </script>
+  <?php require __DIR__ . '/../app/views/partials/theme_boot.php'; ?>
 </body>
 </html>

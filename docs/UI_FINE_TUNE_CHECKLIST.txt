@@ -1,0 +1,124 @@
+Northbridge College (CollegeWeb) — UI fine-tune & backlog checklist
+====================================================================
+Last updated: 2026-05-28
+Purpose: Track polish, theme, data rules, and grader-demo items before/after each sprint.
+Phase 2 target: public/login.php (staff sign-in) — see section 2.
+
+Related docs:
+  docs/PROFESSOR_TEST_CHECKLIST.md  — full setup + demo flows
+  docs/LOGIN_CREDENTIALS.txt          — usernames/passwords for staff portal
+  docs/PROJECT_LOG.md               — dated change log
+
+Status key: [x] done   [ ] todo   [~] partial
+
+----------------------------------------------------------------------
+0) Quick smoke paths (run after any UI change)
+----------------------------------------------------------------------
+[ ] Public / — theme toggle; navbar readable in light and dark
+[ ] public/login.php — sign in, register tab, theme toggle, redirect to admin.php
+[ ] public/admin.php?view=dashboard — Alerts "Active holds (N)" opens holds table
+[ ] public/admin.php?view=people&id=123123 — holds panel, enrollments by term
+[ ] public/admin.php?view=registration — active hold blocks add/drop for 123123
+
+----------------------------------------------------------------------
+1) Theme (light / dark)
+----------------------------------------------------------------------
+Implementation (reference):
+  app/views/partials/theme_init.php   — apply saved theme before paint
+  app/views/partials/theme_toggle.php — compact sun/moon button
+  app/views/partials/theme_boot.php   — click handler (inline)
+  public/assets/css/theme.css         — staff (.nb-staff) dark overrides
+  Tailwind CDN: darkMode: 'class' on html.dark
+
+Wired on:
+  [x] public/admin.php (body class nb-staff)
+  [x] public/login.php (body class nb-staff)
+  [x] app/views/layouts/admin_portal.php
+  [x] app/views/layouts/main.php + app/views/partials/navbar.php
+
+Known gaps — admin shell:
+  [ ] public/admin.php has many bg-white / text-slate-900 without native dark:
+      — relies on theme.css !important overrides; audit per view:
+      Dashboard, People, Schedule, Enrollment, Registration, Holds, Reports
+  [ ] Included views with heavy light-only classes:
+      app/views/pages/admin/schedule.php
+      app/views/pages/admin/course_detail.php
+      app/views/pages/admin/catalog_manage.php
+      app/views/pages/admin/course_offerings.php
+      People overlays (Update info / Holds) inside admin.php
+  [ ] Chart.js dashboard charts — axis/legend colors in dark mode
+      (public/admin.php dashboard script block)
+  [ ] Remove or fix dead CSS in theme.css if still present
+
+Public site:
+  [~] app/views/pages/home.php — sections stay dark (#0a0f1f); light mode
+      mainly changes navbar/body. Decide if demo needs a true light hero.
+  [x] Navbar light/dark dual classes (app/views/partials/navbar.php)
+
+Long-term (optional):
+  [ ] Replace theme.css hacks with systematic dark: on components
+  [ ] Pin Tailwind version or add a build step instead of CDN-only
+
+----------------------------------------------------------------------
+2) Login page (Phase 2 — public/login.php)
+----------------------------------------------------------------------
+[x] Theme toggle in header
+[x] Light/dark panels (sign-in + register)
+[x] Form labels/inputs dual-theme (sign-in)
+[x] Alert banners readable in light + dark (success/error/DB warning)
+[x] Register confirm field + submit button match sign-in styling
+[x] Register footer "Sign in" link dual-theme
+[x] Background accent visible in light mode
+[x] Logo image (northbridge_university_icon.svg) in panel header
+[x] Redirect after login → admin.php (see LOGIN_CREDENTIALS.txt)
+
+Routes (for graders):
+  [x] Bookmark: …/public/login.php (recommended — see LOGIN_CREDENTIALS.txt)
+  [~] GET /login via index.php may redirect; same handler as login.php shim
+
+Still optional:
+  [ ] Unify with app/views/pages/admin/login.php layout (routed /login) if
+      you want one template for both entry points
+  [ ] Password visibility toggle on fields
+
+----------------------------------------------------------------------
+3) Holds
+----------------------------------------------------------------------
+[x] Dashboard Alerts chip "Active holds (N)" → admin.php?view=holds#admin-active-holds-list
+[x] Holds directory table (app/views/pages/admin/holds_directory.php)
+[x] Student ID in table → people&id=…&people_panel=hold
+[ ] Dark mode: verify link/badge contrast on holds table
+[ ] Document for graders: sidebar "Holds" = directory; header "Student hold lookup"
+      = legacy /admin/holds (lookup by student_id only)
+
+----------------------------------------------------------------------
+4) Enrollment & catalog rules (grader-sensitive)
+----------------------------------------------------------------------
+[x] Registration blocks same course_id twice per student per term (admin.php POST)
+[x] Faculty may teach multiple different course_ids — OK by design
+[ ] Run duplicate enrollment cleanup on demo DB before submit:
+      php scripts/fix_duplicate_course_enrollments.php --dry-run
+      php scripts/fix_duplicate_course_enrollments.php
+[ ] Max 1 major + 1 minor per student — DB constraint + people panel validation
+      (see migrations + admin.php people_update_student)
+
+----------------------------------------------------------------------
+5) Admin UX / navigation
+----------------------------------------------------------------------
+[ ] Sidebar (desktop) vs mobile drawer — same links, test both
+[ ] Header shortcuts vs sidebar:
+      — "Student hold lookup" → /admin/holds (ID lookup)
+      — Sidebar "Holds" → admin.php?view=holds (active holds list)
+      — Alerts "Active holds (N)" → same list with anchor
+[ ] admin.php (monolith) vs admin_portal layout (e.g. routed schedule) — theme on both
+
+----------------------------------------------------------------------
+6) Data / scripts (not UI, but affects demo)
+----------------------------------------------------------------------
+[ ] php scripts/migrate.php — current schema
+[ ] php scripts/import_all.php — registrar CSV data
+[ ] php scripts/seed_demo_registration.php — demo student 123123, FA26, sample hold
+[ ] README mentions fix_duplicate_course_enrollments.php next to other scripts
+
+----------------------------------------------------------------------
+End of checklist — tick items as you complete them.

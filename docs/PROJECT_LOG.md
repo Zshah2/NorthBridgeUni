@@ -6,6 +6,22 @@ Add new entries at the **top** under the latest date.
 
 ---
 
+## 2026-05-28 — UI fine-tune checklist + login polish
+
+**Goal:** Single backlog for theme, holds, enrollment rules, admin UX, and grader smoke paths; then polish staff login.
+
+**Changes**
+
+| Area | Detail |
+|------|--------|
+| [docs/UI_FINE_TUNE_CHECKLIST.txt](UI_FINE_TUNE_CHECKLIST.txt) | New plain-text checklist (`[ ]` / `[x]` / `[~]`) — full backlog from recent work |
+| [public/login.php](../public/login.php) | Light/dark alerts, logo, register form styling, background accent |
+| Theme stack | `theme_init`, `theme_toggle`, `theme_boot`, [public/assets/css/theme.css](../public/assets/css/theme.css), `nb-staff` on admin/login |
+
+**Next:** Work through section 1 (admin dark audit) using the checklist; optional homepage light hero.
+
+---
+
 ## 2026-04-22 — `public/login.php` + `public/signup.php` shims
 
 **Goal:** Some setups expect real files named `login.php` in `public/`.

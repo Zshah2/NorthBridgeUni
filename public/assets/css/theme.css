@@ -1,0 +1,220 @@
+/* Theme — background only on body (do not set text color here; it breaks nested cards) */
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #020617;
+}
+
+html:not(.dark) body {
+  background-color: #f8fafc;
+}
+
+html:not(.dark) header.sticky {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+/* Staff admin UI (admin.php, login, admin_portal layout) */
+html.dark.nb-staff-active body,
+html.dark .nb-staff {
+  background-color: #020617;
+  color: #e2e8f0;
+}
+
+html.dark .nb-staff .bg-white {
+  background-color: #1e293b !important;
+}
+
+html.dark .nb-staff .bg-slate-50,
+html.dark .nb-staff .bg-slate-50\/80 {
+  background-color: #0f172a !important;
+}
+
+html.dark .nb-staff .border-slate-200,
+html.dark .nb-staff .border-slate-100 {
+  border-color: #475569 !important;
+}
+
+html.dark .nb-staff .text-slate-900,
+html.dark .nb-staff .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+html.dark .nb-staff .text-slate-700,
+html.dark .nb-staff .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .nb-staff .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark .nb-staff .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html.dark .nb-staff .text-indigo-700,
+html.dark .nb-staff .text-indigo-800,
+html.dark .nb-staff .text-indigo-950 {
+  color: #c7d2fe !important;
+}
+
+html.dark .nb-staff .text-indigo-600 {
+  color: #a5b4fc !important;
+}
+
+html.dark .nb-staff .bg-indigo-50 {
+  background-color: #312e81 !important;
+}
+
+html.dark .nb-staff .ring-indigo-200 {
+  --tw-ring-color: rgb(99 102 241 / 0.45);
+}
+
+html.dark .nb-staff .bg-slate-100 {
+  background-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .nb-staff thead.bg-slate-50,
+html.dark .nb-staff .bg-slate-50.sticky {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .nb-staff tbody tr:hover,
+html.dark .nb-staff .hover\:bg-slate-50:hover,
+html.dark .nb-staff .hover\:bg-slate-50\/60:hover,
+html.dark .nb-staff .hover\:bg-slate-50\/70:hover,
+html.dark .nb-staff .hover\:bg-slate-100:hover {
+  background-color: #334155 !important;
+}
+
+html.dark .nb-staff .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #475569 !important;
+}
+
+html.dark .nb-staff input,
+html.dark .nb-staff select,
+html.dark .nb-staff textarea {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+html.dark .nb-staff input::placeholder,
+html.dark .nb-staff textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark .nb-staff .bg-amber-50,
+html.dark .nb-staff .bg-amber-50\/90 {
+  background-color: #422006 !important;
+  border-color: #92400e !important;
+}
+
+html.dark .nb-staff .text-amber-950,
+html.dark .nb-staff .text-amber-900 {
+  color: #fef3c7 !important;
+}
+
+html.dark .nb-staff .text-amber-900\/90 {
+  color: #fde68a !important;
+}
+
+html.dark .nb-staff .bg-amber-100 {
+  background-color: #78350f !important;
+  color: #fef3c7 !important;
+}
+
+html.dark .nb-staff .ring-amber-200 {
+  --tw-ring-color: rgb(245 158 11 / 0.35);
+}
+
+html.dark .nb-staff .bg-emerald-50 {
+  background-color: #052e16 !important;
+  border-color: #166534 !important;
+  color: #bbf7d0 !important;
+}
+
+html.dark .nb-staff .text-emerald-950 {
+  color: #bbf7d0 !important;
+}
+
+html.dark .nb-staff .bg-rose-50 {
+  background-color: #4c0519 !important;
+  border-color: #9f1239 !important;
+  color: #fecdd3 !important;
+}
+
+html.dark .nb-staff .text-rose-950 {
+  color: #fecdd3 !important;
+}
+
+html.dark .nb-staff code {
+  background-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .nb-staff .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.35);
+}
+
+html.dark .nb-staff .text-white {
+  color: #f8fafc !important;
+}
+
+html.dark .nb-staff .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .nb-staff .bg-sky-50,
+html.dark .nb-staff .bg-sky-50\/50 {
+  background-color: #0c4a6e !important;
+  border-color: #0369a1 !important;
+}
+
+html.dark .nb-staff .text-sky-950 {
+  color: #e0f2fe !important;
+}
+
+html.dark .nb-staff .bg-violet-50,
+html.dark .nb-staff .bg-violet-50\/90 {
+  background-color: #4c1d95 !important;
+  border-color: #6d28d9 !important;
+}
+
+html.dark .nb-staff .text-violet-950 {
+  color: #ede9fe !important;
+}
+
+html.dark .nb-staff .border-sky-200,
+html.dark .nb-staff .border-sky-100 {
+  border-color: #0369a1 !important;
+}
+
+html.dark .nb-staff .border-violet-200,
+html.dark .nb-staff .border-violet-100 {
+  border-color: #6d28d9 !important;
+}
+
+html.dark .nb-staff .border-indigo-100 {
+  border-color: #4338ca !important;
+}
+
+html.dark .nb-staff .border-amber-100 {
+  border-color: #b45309 !important;
+}
+
+html.dark .nb-staff .bg-emerald-50 {
+  background-color: #052e16 !important;
+  color: #bbf7d0 !important;
+}
+
+html.dark .nb-staff .text-emerald-900 {
+  color: #bbf7d0 !important;
+}
