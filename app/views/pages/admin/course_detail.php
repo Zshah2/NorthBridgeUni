@@ -46,7 +46,7 @@ $statusBadge = static function (string $status): string {
 };
 ?>
 <?php if ($course === null): ?>
-  <h1 class="text-2xl font-semibold text-slate-900">Course</h1>
+  <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Course</h1>
   <p class="mt-2 text-sm text-slate-600">
     <?php if ($course_id_param === ''): ?>
       No course was specified.
@@ -64,7 +64,7 @@ $statusBadge = static function (string $status): string {
   <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Course record</p>
-      <h1 class="mt-1 text-2xl font-semibold text-slate-900">
+      <h1 class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
         <span class="font-mono"><?= htmlspecialchars($cid) ?></span>
         <span class="font-normal text-slate-600"> — <?= htmlspecialchars((string)($course['course_name'] ?? '')) ?></span>
       </h1>
@@ -87,7 +87,7 @@ $statusBadge = static function (string $status): string {
   <?php
       $courseDesc = trim((string)($course['description'] ?? ''));
   ?>
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
     <h2 class="text-sm font-semibold text-slate-900">Course information</h2>
     <p class="mt-1 text-xs text-slate-500">Catalog summary — what this course covers and how it fits in the curriculum.</p>
     <?php if ($courseDesc !== ''): ?>
@@ -106,7 +106,7 @@ $statusBadge = static function (string $status): string {
     <?php endif; ?>
   </div>
 
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
     <h2 class="text-sm font-semibold text-slate-900">Prerequisites</h2>
     <p class="mt-1 text-xs text-slate-500">Required prior coursework (typically with a passing grade) before students may register.</p>
     <?php if ($prereqs === []): ?>
@@ -163,7 +163,7 @@ $statusBadge = static function (string $status): string {
       <p class="mt-2 text-sm text-slate-600">This course has no scheduled sections yet.</p>
     </div>
   <?php else: ?>
-    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 class="text-sm font-semibold text-slate-900">Sections &amp; roster</h2>

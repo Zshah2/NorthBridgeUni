@@ -3,7 +3,7 @@
 /** @var string $csrf */
 $termsRows = $termsRows ?? [];
 ?>
-<h1 class="text-2xl font-semibold text-slate-900">Terms &amp; registration windows</h1>
+<h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Terms &amp; registration windows</h1>
 <p class="mt-2 text-sm text-slate-600">Control whether students may register for each term and optional open/close dates. Staff overrides remain available to admins during registration.</p>
 
 <div class="mt-6 space-y-6">
@@ -11,7 +11,7 @@ $termsRows = $termsRows ?? [];
     <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">No terms found.</div>
   <?php endif; ?>
   <?php foreach ($termsRows as $tr): ?>
-    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div class="text-lg font-semibold text-slate-900"><?= htmlspecialchars((string)$tr['code']) ?></div>

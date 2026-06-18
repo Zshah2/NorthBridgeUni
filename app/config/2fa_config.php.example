@@ -7,12 +7,16 @@
 declare(strict_types=1);
 
 return [
-    'smtp_host' => 'smtp.example.edu',
+    'portal_2fa_enabled' => true,
+    // true = no SMTP needed locally; code shown on verify_otp.php and storage/logs/otp.log
+    'dev_log_otp' => false,
+
+    'smtp_host' => 'smtp.office365.com', // or smtp.gmail.com
     'smtp_port' => 587,
-    'smtp_encryption' => 'tls', // tls, ssl, or empty string for none
-    'smtp_username' => 'your-smtp-user',
-    'smtp_password' => 'CHANGE_ME',
-    'from_email' => 'noreply@example.edu',
+    'smtp_encryption' => 'tls', // tls, ssl, or '' for none
+    'smtp_username' => 'your-email@example.edu',
+    'smtp_password' => 'CHANGE_ME', // Gmail: use App Password
+    'from_email' => 'your-email@example.edu',
     'from_name' => 'Northbridge College Admin',
     'otp_expiry_minutes' => 5,
 ];

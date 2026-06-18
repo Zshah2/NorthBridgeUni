@@ -1,0 +1,22 @@
+<?php
+
+/**
+ * Copy to 2fa_config.local.php (gitignored).
+ */
+
+declare(strict_types=1);
+
+return [
+    'dev_log_otp' => false,
+
+    // Gmail (local testing)
+    'smtp_host' => 'smtp.gmail.com',
+    'smtp_port' => 587,
+    'smtp_encryption' => 'tls',
+    'smtp_username' => 'you@gmail.com',
+    'smtp_password' => 'GOOGLE_APP_PASSWORD',
+    'from_email' => 'you@gmail.com',
+    'from_name' => 'Your Name',
+
+    // AWS / production: use SMTP_* env vars or override here (e.g. Amazon SES).
+];

@@ -78,6 +78,14 @@ if ($isPost && $dbOk) {
 
 $csrf = csrf_token();
 $pageTitle = 'Verify sign-in — Northbridge College';
+$devOtpPreview = null;
+if (
+    isset($_SESSION['dev_otp_preview'], $_SESSION['dev_otp_preview_for'])
+    && is_string($_SESSION['dev_otp_preview'])
+    && twofa_normalize_email((string)$_SESSION['dev_otp_preview_for']) === twofa_normalize_email($pendingEmail)
+) {
+    $devOtpPreview = $_SESSION['dev_otp_preview'];
+}
 
 $inputClass = 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-400/20 dark:border-white/10 dark:bg-slate-950/50 dark:text-white dark:placeholder:text-slate-500';
 $alertSuccessClass = 'mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100';
@@ -145,6 +153,13 @@ $alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-
       <?php endif; ?>
       <?php if ($verifyError): ?>
         <div class="<?= htmlspecialchars($alertErrorClass) ?>"><?= htmlspecialchars($verifyError) ?></div>
+      <?php endif; ?>
+      <?php if ($devOtpPreview !== null): ?>
+        <div class="<?= htmlspecialchars($alertWarnClass) ?>">
+          <strong class="block font-semibold">Local testing (no email sent)</strong>
+          <span class="mt-1 block">Add <code class="text-xs">smtp_password</code> in <code class="text-xs">app/config/2fa_config.local.php</code> to receive codes in your inbox. For now, use:</span>
+          <p class="mt-2 font-mono text-2xl font-bold tracking-[0.35em]"><?= htmlspecialchars($devOtpPreview) ?></p>
+        </div>
       <?php endif; ?>
 
       <form class="mt-6 space-y-4" method="post" action="<?= htmlspecialchars(url('/verify_otp.php')) ?>" autocomplete="one-time-code">

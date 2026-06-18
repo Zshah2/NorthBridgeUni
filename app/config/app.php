@@ -23,7 +23,7 @@ return [
     ],
     'cta' => [
         'primary' => ['label' => 'Apply Now', 'href' => '#admissions'],
-        'secondary' => ['label' => 'Staff login', 'href' => '/login.php'],
+        'secondary' => ['label' => 'Admin sign in', 'href' => '/login.php'],
     ],
 ];
 

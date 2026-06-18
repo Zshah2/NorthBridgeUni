@@ -2,10 +2,10 @@
 /** @var array<int, array<string, mixed>> $holdRows */
 $holdRows = $holdRows ?? [];
 ?>
-<h1 class="text-2xl font-semibold text-slate-900">Active holds</h1>
+<h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Active holds</h1>
 <p class="mt-2 text-sm text-slate-600">Students with at least one active hold — registration may be blocked until cleared.</p>
 
-<div id="admin-active-holds-list" class="scroll-mt-28 mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+<div id="admin-active-holds-list" class="scroll-mt-28 mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
   <table class="min-w-full text-left text-sm">
     <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
       <tr>

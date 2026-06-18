@@ -16,7 +16,10 @@
   function applyTheme(next) {
     var dark = next === 'dark';
     document.documentElement.classList.toggle('dark', dark);
-    document.documentElement.classList.toggle('nb-staff-active', dark && document.body && document.body.classList.contains('nb-staff'));
+    if (document.body) {
+      document.documentElement.classList.toggle('nb-staff-active', dark && document.body.classList.contains('nb-staff'));
+      document.documentElement.classList.toggle('nb-site-active', dark && document.body.classList.contains('nb-site'));
+    }
     try {
       localStorage.setItem('theme', dark ? 'dark' : 'light');
     } catch (e) {}

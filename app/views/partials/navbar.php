@@ -22,7 +22,7 @@
           <span class="font-semibold text-slate-800 dark:text-slate-100">For:</span>
           <a class="transition-colors hover:text-indigo-700 dark:hover:text-cyan-200" href="#admissions">Students</a>
           <span class="text-slate-300 dark:text-fuchsia-400/40">·</span>
-          <a class="transition-colors hover:text-indigo-700 dark:hover:text-cyan-200" href="/login.php">Staff</a>
+          <a class="transition-colors hover:text-indigo-700 dark:hover:text-cyan-200" href="/login.php">Admin sign in</a>
         </div>
 
         <a class="inline-flex items-center gap-2 font-semibold text-slate-600 transition-colors hover:text-indigo-700 dark:text-cyan-100/90 dark:hover:text-cyan-50" href="#programs">
@@ -91,7 +91,7 @@
           </a>
         <?php endforeach; ?>
         <div class="mt-2 grid grid-cols-2 gap-2">
-          <a class="rounded-xl border border-cyan-500/25 bg-cyan-950/25 px-3 py-2 text-center text-sm font-semibold text-cyan-100 shadow-sm hover:bg-cyan-900/35" href="<?= htmlspecialchars(nav_url('/login.php')) ?>">
+          <a class="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-center text-sm font-semibold text-cyan-900 shadow-sm hover:bg-cyan-100 dark:border-cyan-500/25 dark:bg-cyan-950/25 dark:text-cyan-100 dark:hover:bg-cyan-900/35" href="<?= htmlspecialchars(nav_url('/login.php')) ?>">
             Login
           </a>
           <a class="rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-lg shadow-fuchsia-900/30 hover:from-fuchsia-500 hover:to-violet-500" href="<?= htmlspecialchars(nav_url($app['cta']['primary']['href'])) ?>">

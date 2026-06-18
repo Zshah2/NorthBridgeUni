@@ -9,6 +9,7 @@ require __DIR__ . '/../app/lib/url.php';
 require __DIR__ . '/../app/lib/db.php';
 require_once __DIR__ . '/../app/lib/admin_term_policy.php';
 require __DIR__ . '/../app/lib/auth.php';
+require __DIR__ . '/../app/lib/ui.php';
 require __DIR__ . '/../app/lib/csrf.php';
 
 header('Content-Type: text/html; charset=utf-8');
@@ -16,7 +17,7 @@ header('Content-Type: text/html; charset=utf-8');
 auth_start_session();
 auth_require_portal_user();
 
-$user = (string)($_SESSION['auth']['username'] ?? '');
+$user = auth_portal_display_name();
 $currentAuthId = (int)($_SESSION['auth']['id'] ?? 0);
 $isAdmin = auth_is_admin();
 $isLimited = auth_is_limited();
@@ -105,7 +106,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         exit;
     }
     if ($isLimited) {
-        $blocked = ['grade_upsert', 'people_scr_upsert', 'catalog_course_save', 'catalog_prereqs_save', 'term_registration_save', 'auth_password_reset', 'auth_user_active', 'reg_promote'];
+        $blocked = ['grade_upsert', 'people_scr_upsert', 'catalog_course_save', 'catalog_prereqs_save', 'term_registration_save', 'auth_password_reset', 'auth_login_save', 'auth_email_save', 'auth_user_active', 'reg_promote'];
         $act = (string)($_POST['action'] ?? '');
         if (in_array($act, $blocked, true)) {
             header('Location: ' . url('/admin.php?view=' . rawurlencode($view) . '&msg=forbidden'));
@@ -792,6 +793,82 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         exit;
     }
 
+    if ($action === 'auth_login_save' && $isAdmin) {
+        $aid = isset($_POST['auth_id']) && ctype_digit((string)$_POST['auth_id']) ? (int)$_POST['auth_id'] : null;
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
+        $displayName = trim((string)($_POST['display_name'] ?? ''));
+        $pw = trim((string)($_POST['new_password'] ?? ''));
+        if ($aid === null || $aid < 1) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=invalid'));
+            exit;
+        }
+        [$ok, $err] = auth_update_portal_login(
+            $aid,
+            $email,
+            $pw !== '' ? $pw : null,
+            null,
+            $displayName !== '' ? $displayName : null,
+        );
+        if (!$ok) {
+            $code = str_contains((string)$err, 'email') ? 'email_invalid' : 'pwd_invalid';
+            if (str_contains((string)$err, 'already')) {
+                $code = 'email_taken';
+            }
+            if (str_contains((string)$err, '8 characters')) {
+                $code = 'pwd_invalid';
+            }
+            header('Location: ' . url('/admin.php?view=accounts&msg=' . $code));
+            exit;
+        }
+        admin_audit($pdo, 'auth_login_save', 'id=' . $aid);
+        header('Location: ' . url('/admin.php?view=accounts&msg=login_saved'));
+        exit;
+    }
+
+    if ($action === 'auth_self_creds_save') {
+        $sessionAuthId = (int)($_SESSION['auth']['id'] ?? 0);
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
+        $displayName = trim((string)($_POST['display_name'] ?? ''));
+        $current = (string)($_POST['current_password'] ?? '');
+        $newPw = (string)($_POST['new_password'] ?? '');
+        $confirm = (string)($_POST['confirm_password'] ?? '');
+        if ($sessionAuthId < 1 || $current === '') {
+            header('Location: ' . url('/admin.php?view=settings&msg=invalid'));
+            exit;
+        }
+        if ($newPw !== '' && $newPw !== $confirm) {
+            header('Location: ' . url('/admin.php?view=settings&msg=pwd_mismatch'));
+            exit;
+        }
+        [$ok, $err] = auth_update_portal_login(
+            $sessionAuthId,
+            $email,
+            $newPw !== '' ? $newPw : null,
+            $current,
+            $displayName !== '' ? $displayName : null,
+        );
+        if (!$ok) {
+            $code = 'self_failed';
+            if (str_contains((string)$err, 'Current password')) {
+                $code = 'self_bad_password';
+            } elseif (str_contains((string)$err, 'already')) {
+                $code = 'email_taken';
+            } elseif (str_contains((string)$err, 'email')) {
+                $code = 'email_invalid';
+            } elseif (str_contains((string)$err, '8 characters')) {
+                $code = 'pwd_invalid';
+            }
+            header('Location: ' . url('/admin.php?view=settings&msg=' . $code));
+            exit;
+        }
+        if ($displayName !== '') {
+            $_SESSION['auth']['display_name'] = $displayName;
+        }
+        admin_audit($pdo, 'auth_self_creds_save', 'id=' . $sessionAuthId);
+        header('Location: ' . url('/admin.php?view=settings&msg=login_saved'));
+        exit;
+    }
+
     if ($action === 'auth_password_reset' && $isAdmin) {
         $aid = isset($_POST['auth_id']) && ctype_digit((string)$_POST['auth_id']) ? (int)$_POST['auth_id'] : null;
         $pw = (string)($_POST['new_password'] ?? '');
@@ -799,8 +876,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             header('Location: ' . url('/admin.php?view=accounts&msg=pwd_invalid'));
             exit;
         }
-        $hash = password_hash($pw, PASSWORD_DEFAULT);
-        $pdo->prepare('UPDATE auth_users SET password_hash = ? WHERE id = ?')->execute([$hash, $aid]);
+        [$ok, $err] = auth_update_user_password($aid, $pw);
+        if (!$ok) {
+            header('Location: ' . url('/admin.php?view=accounts&msg=pwd_invalid'));
+            exit;
+        }
         admin_audit($pdo, 'auth_password_reset', 'id=' . $aid);
         header('Location: ' . url('/admin.php?view=accounts&msg=pwd_reset'));
         exit;
@@ -839,6 +919,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             header('Location: ' . url('/admin.php?view=accounts&msg=email_invalid'));
             exit;
+        }
+        if ($email !== '') {
+            $dup = $pdo->prepare('SELECT id FROM auth_users WHERE LOWER(TRIM(email)) = ? AND id <> ? LIMIT 1');
+            $dup->execute([$email, $aid]);
+            if ($dup->fetchColumn()) {
+                header('Location: ' . url('/admin.php?view=accounts&msg=email_taken'));
+                exit;
+            }
         }
         try {
             $pdo->prepare('UPDATE auth_users SET email = ? WHERE id = ?')->execute([$email === '' ? null : $email, $aid]);
@@ -1435,10 +1523,10 @@ function admin_grade_points_from_letter(string $letter): ?float
 function admin_enrollment_badge_classes(string $status): string
 {
     return match (strtolower(trim($status))) {
-        'enrolled' => 'bg-emerald-100 text-emerald-900 ring-emerald-200',
-        'waitlisted' => 'bg-amber-100 text-amber-900 ring-amber-200',
-        'dropped' => 'bg-slate-100 text-slate-700 ring-slate-200',
-        default => 'bg-slate-100 text-slate-800 ring-slate-200',
+        'enrolled' => 'bg-emerald-100 text-emerald-900 ring-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-800',
+        'waitlisted' => 'bg-amber-100 text-amber-900 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800',
+        'dropped' => 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600',
+        default => 'bg-slate-100 text-slate-800 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600',
     };
 }
 
@@ -1503,7 +1591,7 @@ function nav_group_label(string $label): string
             />
             <div class="min-w-0">
               <div class="truncate text-sm font-semibold text-slate-900 dark:text-white">Northbridge Admin</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400">Staff dashboard</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400">Admin dashboard</div>
             </div>
           </a>
           <div class="flex items-center gap-2 lg:hidden">
@@ -1623,7 +1711,7 @@ function nav_group_label(string $label): string
         </nav>
         <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="mt-4">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-          <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50">Log out</button>
+          <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50 dark:text-rose-300 dark:ring-rose-800 dark:hover:bg-rose-950/50">Log out</button>
         </form>
 
         <p class="mt-4 text-xs leading-relaxed text-slate-500">
@@ -1639,7 +1727,7 @@ function nav_group_label(string $label): string
     </div>
   </div>
 
-  <main id="adminMain" class="relative w-full px-4 py-10 sm:px-6">
+  <main id="adminMain" class="nb-admin-content relative w-full px-4 py-10 sm:px-6">
     <?php
     $flashMsg = trim((string)($_GET['msg'] ?? ''));
     $flashMap = [
@@ -1661,11 +1749,11 @@ function nav_group_label(string $label): string
     if ($flashMsg !== '' && isset($flashMap[$flashMsg])) {
         [$ftone, $ftext] = $flashMap[$flashMsg];
         if ($ftone === 'error') {
-            $fcls = 'border-rose-200 bg-rose-50 text-rose-950';
+            $fcls = 'border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-100';
         } elseif ($ftone === 'success') {
-            $fcls = 'border-emerald-200 bg-emerald-50 text-emerald-950';
+            $fcls = 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100';
         } else {
-            $fcls = 'border-amber-200 bg-amber-50 text-amber-950';
+            $fcls = 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100';
         }
         echo '<div class="mb-6 rounded-2xl border ' . $fcls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($ftext) . '</div>';
     }
@@ -1701,7 +1789,7 @@ function nav_group_label(string $label): string
           </nav>
           <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="mt-4">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
-            <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50">Log out</button>
+            <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50 dark:text-rose-300 dark:ring-rose-800 dark:hover:bg-rose-950/50">Log out</button>
           </form>
           <p class="mt-4 text-xs leading-relaxed text-slate-500">
             <?php if ($isViewer): ?>
@@ -1718,12 +1806,12 @@ function nav_group_label(string $label): string
         <?php if ($view === 'dashboard'): ?>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 class="text-2xl font-semibold text-slate-900">Dashboard</h1>
+              <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Dashboard</h1>
               <p class="mt-2 text-sm text-slate-600">Operations snapshot — enrollment activity, data quality, and this term’s busiest sections.</p>
             </div>
             <div class="flex flex-wrap gap-2">
-              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
-              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>" title="Look up holds for one student by ID">Student hold lookup</a>
+              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
+              <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin/holds')) ?>" title="Look up holds for one student by ID">Student hold lookup</a>
             </div>
           </div>
 
@@ -1731,15 +1819,15 @@ function nav_group_label(string $label): string
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="text-sm font-semibold text-amber-950">Alerts &amp; notices</div>
               <div class="flex flex-wrap gap-2 text-xs">
-                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%40northbridge.edu')) ?>">Email gaps (<?= (int)($dash['students_missing_email'] ?? 0) + (int)($dash['faculty_missing_email'] ?? 0) ?>)</a>
-                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Phone checks (<?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?>)</a>
-                <a class="rounded-full bg-white px-3 py-1.5 font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-100" title="Open the full list of active registration holds" href="<?= htmlspecialchars(url('/admin.php?view=holds#admin-active-holds-list')) ?>">Active holds (<?= (int)$counts['holds_active'] ?>)</a>
+                <a class="<?= htmlspecialchars(ui_alert_pill()) ?>" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%40northbridge.edu')) ?>">Email gaps (<?= (int)($dash['students_missing_email'] ?? 0) + (int)($dash['faculty_missing_email'] ?? 0) ?>)</a>
+                <a class="<?= htmlspecialchars(ui_alert_pill()) ?>" href="<?= htmlspecialchars(url('/admin.php?view=schedule&q=%28')) ?>">Phone checks (<?= (int)($dash['students_missing_phone'] ?? 0) + (int)($dash['faculty_missing_phone'] ?? 0) ?>)</a>
+                <a class="<?= htmlspecialchars(ui_alert_pill()) ?>" title="Open the full list of active registration holds" href="<?= htmlspecialchars(url('/admin.php?view=holds#admin-active-holds-list')) ?>">Active holds (<?= (int)$counts['holds_active'] ?>)</a>
               </div>
             </div>
             <p class="mt-2 text-xs text-amber-900/90">Tip: use the header search to open <strong class="font-semibold">Master schedule</strong> with your query — fastest way to find people by ID, name, email, or phone.</p>
           </div>
 
-          <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Current term spotlight</div>
@@ -1814,22 +1902,22 @@ function nav_group_label(string $label): string
           </div>
 
           <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase text-slate-500">Total students</div>
               <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)$counts['students'] ?></div>
               <div class="mt-2 text-xs text-slate-500"><?= (int)($dash['students_missing_email'] ?? 0) ?> missing email · <?= (int)($dash['students_missing_phone'] ?? 0) ?> missing phone</div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase text-slate-500">Total faculty</div>
               <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)$counts['faculty'] ?></div>
               <div class="mt-2 text-xs text-slate-500"><?= (int)($dash['faculty_missing_email'] ?? 0) ?> missing email · <?= (int)($dash['faculty_missing_phone'] ?? 0) ?> missing phone</div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase text-slate-500">Active courses (this term)</div>
               <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)($counts['courses_active_term'] ?? 0) ?></div>
               <div class="mt-2 text-xs text-slate-500"><?= (int)($dash['term_sections'] ?? 0) ?> sections · <?= (int)($counts['courses_catalog'] ?? 0) ?> courses in catalog</div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase text-slate-500">Departments</div>
               <div class="mt-2 text-3xl font-semibold tabular-nums"><?= (int)($counts['departments'] ?? 0) ?></div>
               <div class="mt-2 text-xs text-slate-500">
@@ -1842,17 +1930,17 @@ function nav_group_label(string $label): string
           </div>
 
           <div class="mt-8 grid gap-6 lg:grid-cols-3">
-            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Enrollment trend</div>
               <p class="mt-1 text-xs text-slate-500">New enrollment rows recorded per month (last 12 months)</p>
               <div class="mt-3 h-56 w-full"><canvas id="chartEnrollmentLine" aria-label="Enrollment trend chart"></canvas></div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Students by department</div>
               <p class="mt-1 text-xs text-slate-500">Declared majors / student-department links</p>
               <div class="mt-3 h-56 w-full"><canvas id="chartDeptBar" aria-label="Students per department chart"></canvas></div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Course seat status</div>
               <p class="mt-1 text-xs text-slate-500">Enrollment rows for <?= $currentTermCode ? htmlspecialchars($currentTermCode) : 'current term' ?></p>
               <div class="mt-3 h-56 w-full"><canvas id="chartStatusDonut" aria-label="Enrollment status breakdown chart"></canvas></div>
@@ -1861,7 +1949,7 @@ function nav_group_label(string $label): string
 
           <div class="mt-8 grid gap-6 lg:grid-cols-12">
             <div class="lg:col-span-8">
-              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent enrollments</div>
@@ -1912,7 +2000,7 @@ function nav_group_label(string $label): string
               </div>
             </div>
             <div class="lg:col-span-4">
-              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick actions</div>
                 <ul class="mt-4 space-y-2 text-sm">
                   <li><a class="inline-flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-semibold text-slate-900 hover:bg-slate-100" href="<?= htmlspecialchars(url('/admin.php?view=people')) ?>">Add / lookup student <span aria-hidden="true">→</span></a></li>
@@ -1926,7 +2014,7 @@ function nav_group_label(string $label): string
           </div>
 
           <div class="mt-8 grid gap-6 lg:grid-cols-2">
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent activity</div>
               <p class="mt-1 text-sm text-slate-600">Latest actions logged from this admin portal</p>
               <ul class="mt-4 max-h-80 space-y-3 overflow-y-auto text-sm">
@@ -1951,7 +2039,7 @@ function nav_group_label(string $label): string
                 <?php endif; ?>
               </ul>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Needs attention (detail)</div>
               <ul class="mt-4 space-y-2 text-sm">
                 <li class="flex items-center justify-between gap-3">
@@ -2097,19 +2185,19 @@ function nav_group_label(string $label): string
               }
           }
           ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Reports &amp; Analytics</h1>
+          <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Reports &amp; Analytics</h1>
           <p class="mt-2 text-sm text-slate-600">Enrollment by section for the current term, CSV export, and links to operational views.</p>
           <div class="mt-6 flex flex-wrap gap-3">
             <?php if ($isAdmin && $currentTermCode !== null): ?>
               <a class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" href="<?= htmlspecialchars(url('/admin.php?view=reports&export=enrollment_summary')) ?>">Download enrollment CSV (<?= htmlspecialchars($currentTermCode) ?>)</a>
             <?php endif; ?>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard charts</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Enrollment</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=departments')) ?>">Departments</a>
-            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Master schedule</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard charts</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Enrollment</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=departments')) ?>">Departments</a>
+            <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Master schedule</a>
           </div>
           <?php if ($isAdmin && $currentTermCode !== null): ?>
-            <div class="mt-8 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="mt-8 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <table class="min-w-full text-left text-sm">
                 <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                   <tr>
@@ -2148,7 +2236,7 @@ function nav_group_label(string $label): string
 
         <?php elseif ($view === 'catalog'): ?>
           <?php if (!$isAdmin): ?>
-            <h1 class="text-2xl font-semibold text-slate-900">Course catalog</h1>
+            <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Course catalog</h1>
             <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Catalog editing requires an administrator role.</div>
           <?php else: ?>
             <?php
@@ -2207,7 +2295,7 @@ function nav_group_label(string $label): string
 
         <?php elseif ($view === 'terms'): ?>
           <?php if (!$isAdmin): ?>
-            <h1 class="text-2xl font-semibold text-slate-900">Terms</h1>
+            <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Terms</h1>
             <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Term registration settings require an administrator role.</div>
           <?php else: ?>
             <?php
@@ -2261,8 +2349,8 @@ function nav_group_label(string $label): string
 
         <?php elseif ($view === 'accounts'): ?>
           <?php if (!$isAdmin): ?>
-            <h1 class="text-2xl font-semibold text-slate-900">Accounts</h1>
-            <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Staff account management requires an administrator role.</div>
+            <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Accounts</h1>
+            <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">Account management requires an administrator role.</div>
           <?php else: ?>
             <?php
             $acctFlash = trim((string)($_GET['msg'] ?? ''));
@@ -2273,8 +2361,10 @@ function nav_group_label(string $label): string
                 'self_not_allowed' => ['error', 'You cannot deactivate your own account.'],
                 'invalid' => ['error', 'Invalid request.'],
                 'active_failed' => ['error', 'Could not update — ensure auth_users.is_active exists (run migrations).'],
+                'login_saved' => ['success', 'Login updated (email and/or password).'],
                 'email_saved' => ['success', 'Email updated.'],
-                'email_invalid' => ['error', 'Enter a valid email address or leave blank.'],
+                'email_taken' => ['error', 'That email is already used by another account.'],
+                'email_invalid' => ['error', 'Enter a valid email address.'],
                 'email_failed' => ['error', 'Could not save email — run migrations (auth_users.email).'],
             ];
             if ($acctFlash !== '' && isset($acctFlashMap[$acctFlash])) {
@@ -2284,7 +2374,7 @@ function nav_group_label(string $label): string
             }
             $authRows = [];
             try {
-                $authRows = $pdo->query('SELECT id, username, email, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $authRows = $pdo->query('SELECT id, username, display_name, email, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
             } catch (Throwable) {
                 try {
                     $authRows = $pdo->query('SELECT id, username, role, IFNULL(is_active, 1) AS is_active FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -2304,20 +2394,44 @@ function nav_group_label(string $label): string
           <?php endif; ?>
 
         <?php elseif ($view === 'messages'): ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Messages</h1>
+          <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Messages</h1>
           <p class="mt-2 max-w-2xl text-sm text-slate-600">In-app messaging is not enabled yet. Use official email for registrar communications.</p>
           <div class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             Coming soon — optional inbox tied to holds and registration events.
           </div>
 
         <?php elseif ($view === 'settings'): ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Settings</h1>
-          <p class="mt-2 text-sm text-slate-600">Shortcuts to operational configuration available today.</p>
-          <ul class="mt-6 space-y-3 text-sm">
+          <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Settings</h1>
+          <p class="mt-2 text-sm text-slate-600">Your login and shortcuts.</p>
+          <?php
+            $settingsFlash = trim((string)($_GET['msg'] ?? ''));
+            $settingsFlashMap = [
+                'login_saved' => ['success', 'Your login was updated.'],
+                'pwd_invalid' => ['error', 'New password must be at least 8 characters.'],
+                'pwd_mismatch' => ['error', 'New passwords do not match.'],
+                'self_bad_password' => ['error', 'Current password is incorrect.'],
+                'email_taken' => ['error', 'That email is already used by another account.'],
+                'email_invalid' => ['error', 'Enter a valid email address.'],
+                'self_failed' => ['error', 'Could not update login.'],
+                'invalid' => ['error', 'Invalid request.'],
+            ];
+            if ($settingsFlash !== '' && isset($settingsFlashMap[$settingsFlash])) {
+                [$st, $stxt] = $settingsFlashMap[$settingsFlash];
+                $scls = $st === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-rose-200 bg-rose-50 text-rose-950';
+                echo '<div class="mb-6 rounded-2xl border ' . $scls . ' px-4 py-3 text-sm font-medium">' . htmlspecialchars($stxt) . '</div>';
+            }
+            $selfAccount = auth_fetch_user_by_id((int)($_SESSION['auth']['id'] ?? 0)) ?? [];
+            require __DIR__ . '/../app/views/pages/admin/account_settings.php';
+          ?>
+          <h2 class="mt-10 text-lg font-semibold text-slate-900">Shortcuts</h2>
+          <ul class="mt-3 space-y-3 text-sm">
             <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=holds')) ?>">Active holds directory</a></li>
             <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Legacy holds page</a></li>
             <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/')) ?>">Public site home</a></li>
-            <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/login.php')) ?>">Staff login page</a> <span class="text-slate-500">(sign out first to create another admin)</span></li>
+            <?php if ($isAdmin): ?>
+              <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=accounts')) ?>">Manage all accounts</a></li>
+            <?php endif; ?>
+            <li><a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/login.php')) ?>">Sign-in page</a> <span class="text-slate-500">(sign out first to create another admin)</span></li>
           </ul>
           <p class="mt-6 text-xs text-slate-500">Your role: <strong class="font-semibold text-slate-700"><?= htmlspecialchars($roleLabel) ?></strong></p>
 
@@ -2345,7 +2459,7 @@ function nav_group_label(string $label): string
           <div class="<?= $idLookupHasSearch ? 'space-y-6' : 'space-y-8' ?>">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-900">Students &amp; faculty</h1>
+                <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Students &amp; faculty</h1>
                 <?php if (!$idLookupHasSearch): ?>
                   <p class="mt-2 text-sm text-slate-600">Enter a student or faculty numeric ID to load their record.</p>
                 <?php else: ?>
@@ -2402,7 +2516,7 @@ function nav_group_label(string $label): string
                 <h2 class="text-sm font-semibold text-emerald-950">Add a person</h2>
                 <p class="mt-2 text-sm leading-relaxed text-slate-700">
                   New students and faculty are usually loaded from registrar CSV import. After a record exists, search by ID above for enrollments, teaching assignments, and holds.
-                  To add another <strong class="font-semibold text-slate-800">staff portal login</strong>, sign out and use Create account on the sign-in page.
+                  To add another <strong class="font-semibold text-slate-800">admin login</strong>, sign out and use Create account on the sign-in page.
                 </p>
               </div>
             <?php endif; ?>
@@ -2711,7 +2825,7 @@ function nav_group_label(string $label): string
                 }
             }
             ?>
-            <div class="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <?php if (!$ur): ?>
                 <div class="border-b border-slate-200 bg-slate-100 px-5 py-4">
                   <div class="text-sm font-semibold text-slate-800">No match</div>
@@ -3828,10 +3942,10 @@ function nav_group_label(string $label): string
               $rows = [];
           }
           ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Enrollment</h1>
+          <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Enrollment</h1>
           <p class="mt-2 text-sm text-slate-600">Who is enrolled in what (with student + section + course attributes). Use filters to narrow down results.</p>
 
-          <div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
               <input type="hidden" name="view" value="enrollment" />
               <div class="sm:w-64">
@@ -3862,7 +3976,7 @@ function nav_group_label(string $label): string
             <div class="mt-3 text-xs text-slate-500">Showing up to 250 newest rows.</div>
           </div>
 
-          <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <table class="min-w-[72rem] text-left text-sm">
               <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                 <tr>
@@ -3939,7 +4053,7 @@ function nav_group_label(string $label): string
           </div>
 
         <?php elseif ($view === 'departments'): ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Departments</h1>
+          <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Departments</h1>
           <p class="mt-2 text-sm text-slate-600">All departments available in the system.</p>
           <?php
           $depts = $pdo->query('
@@ -4013,7 +4127,7 @@ function nav_group_label(string $label): string
           }
           $terms = $pdo->query('SELECT code, name FROM terms ORDER BY start_date DESC')->fetchAll(PDO::FETCH_ASSOC);
           ?>
-          <h1 class="text-2xl font-semibold text-slate-900">Registration</h1>
+          <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Registration</h1>
           <?php
           $creditSummary = ['courses' => 0, 'credits' => 0, 'max' => $defaultMaxCredits];
           $enrolledNow = [];
@@ -4144,7 +4258,7 @@ function nav_group_label(string $label): string
           }
           $regWindowClosed = ($termId !== null && !admin_term_registration_allowed($pdo, $termId));
           ?>
-          <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
               <input type="hidden" name="view" value="registration" />
               <div class="min-w-0 flex-1 sm:max-w-xs">
@@ -4199,7 +4313,7 @@ function nav_group_label(string $label): string
           <?php if ($regStudentId !== null && $termCode !== ''): ?>
             <div class="mt-6 grid gap-6 lg:grid-cols-12">
               <div class="lg:col-span-7 space-y-4">
-                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                   <div class="flex items-end justify-between gap-3">
                     <div>
                       <h2 class="text-sm font-semibold text-slate-900">Current schedule</h2>
@@ -4276,7 +4390,7 @@ function nav_group_label(string $label): string
               </div>
 
               <div class="lg:col-span-5 space-y-4">
-                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                   <h2 class="text-sm font-semibold text-slate-900">Add class</h2>
                   <p class="mt-1 text-xs text-slate-500">Add by Section ID (fast) or browse available sections for <?= htmlspecialchars($termCode) ?>.</p>
 
@@ -4309,7 +4423,7 @@ function nav_group_label(string $label): string
                   <?php endif; ?>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                   <div class="flex items-end justify-between gap-3">
                     <div>
                       <h3 class="text-sm font-semibold text-slate-900">Browse sections</h3>

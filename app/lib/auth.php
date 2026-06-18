@@ -67,41 +67,252 @@ function auth_has_pending_2fa(): bool
 function auth_clear_pending_2fa(): void
 {
     auth_start_session();
-    unset($_SESSION['pending_2fa_email'], $_SESSION['pending_2fa_auth'], $_SESSION['twofa_resend_after']);
+    unset(
+        $_SESSION['pending_2fa_email'],
+        $_SESSION['pending_2fa_auth'],
+        $_SESSION['twofa_resend_after'],
+        $_SESSION['dev_otp_preview'],
+        $_SESSION['dev_otp_preview_for'],
+    );
+}
+
+function auth_normalize_email(string $email): string
+{
+    return strtolower(trim($email));
+}
+
+function auth_resolve_display_name(array $row): string
+{
+    $display = isset($row['display_name']) ? trim((string)$row['display_name']) : '';
+    if ($display !== '') {
+        return $display;
+    }
+
+    return trim((string)($row['username'] ?? '')) ?: 'Admin';
+}
+
+/** @param array<string, mixed> $row */
+function auth_map_user_row(array $row): array
+{
+    $email = isset($row['email']) ? trim((string)$row['email']) : '';
+    $display = isset($row['display_name']) ? trim((string)$row['display_name']) : '';
+
+    return [
+        'id' => (int)$row['id'],
+        'username' => (string)$row['username'],
+        'display_name' => $display !== '' ? $display : null,
+        'role' => (string)$row['role'],
+        'email' => $email !== '' ? auth_normalize_email($email) : null,
+        'password_hash' => (string)$row['password_hash'],
+        'is_active' => (int)($row['is_active'] ?? 1),
+    ];
+}
+
+function auth_portal_display_name(): string
+{
+    auth_start_session();
+    $n = $_SESSION['auth']['display_name'] ?? null;
+    if (is_string($n) && trim($n) !== '') {
+        return trim($n);
+    }
+    $u = $_SESSION['auth']['username'] ?? '';
+
+    return is_string($u) && $u !== '' ? $u : 'Admin';
+}
+
+/** Derive a unique-friendly username when only email is provided at signup/seed. */
+function auth_username_from_email(string $email): string
+{
+    $local = explode('@', auth_normalize_email($email), 2)[0];
+    $local = preg_replace('/[^a-zA-Z0-9._-]/', '', $local) ?? '';
+
+    return $local !== '' ? substr($local, 0, 100) : 'user';
 }
 
 /**
- * @return array{id: int, username: string, role: string, email: ?string}|null
+ * @return array{id: int, username: string, role: string, email: ?string, password_hash: string, is_active: int}|null
  */
-function auth_fetch_user_row(string $username): ?array
+function auth_fetch_user_by_email(string $email): ?array
 {
+    $email = auth_normalize_email($email);
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return null;
+    }
+
     $pdo = db();
     try {
         $stmt = $pdo->prepare('
-          SELECT id, username, email, password_hash, role, IFNULL(is_active, 1) AS is_active
-          FROM auth_users WHERE username = ? LIMIT 1
+          SELECT id, username, display_name, email, password_hash, role, IFNULL(is_active, 1) AS is_active
+          FROM auth_users WHERE LOWER(TRIM(email)) = ? LIMIT 1
         ');
-        $stmt->execute([$username]);
+        $stmt->execute([$email]);
     } catch (Throwable) {
-        $stmt = $pdo->prepare('
-          SELECT id, username, password_hash, role, IFNULL(is_active, 1) AS is_active
-          FROM auth_users WHERE username = ? LIMIT 1
-        ');
-        $stmt->execute([$username]);
+        try {
+            $stmt = $pdo->prepare('
+              SELECT id, username, email, password_hash, role, IFNULL(is_active, 1) AS is_active
+              FROM auth_users WHERE LOWER(TRIM(email)) = ? LIMIT 1
+            ');
+            $stmt->execute([$email]);
+        } catch (Throwable) {
+            return null;
+        }
     }
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) {
         return null;
     }
 
-    return [
-        'id' => (int)$row['id'],
-        'username' => (string)$row['username'],
-        'role' => (string)$row['role'],
-        'email' => isset($row['email']) ? (trim((string)$row['email']) ?: null) : null,
-        'password_hash' => (string)$row['password_hash'],
-        'is_active' => (int)($row['is_active'] ?? 1),
-    ];
+    return auth_map_user_row($row);
+}
+
+/**
+ * @return array{id: int, username: string, role: string, email: ?string, password_hash: string, is_active: int}|null
+ */
+function auth_fetch_user_by_id(int $id): ?array
+{
+    if ($id < 1) {
+        return null;
+    }
+
+    $pdo = db();
+    try {
+        $stmt = $pdo->prepare('
+          SELECT id, username, display_name, email, password_hash, role, IFNULL(is_active, 1) AS is_active
+          FROM auth_users WHERE id = ? LIMIT 1
+        ');
+        $stmt->execute([$id]);
+    } catch (Throwable) {
+        try {
+            $stmt = $pdo->prepare('
+              SELECT id, username, email, password_hash, role, IFNULL(is_active, 1) AS is_active
+              FROM auth_users WHERE id = ? LIMIT 1
+            ');
+            $stmt->execute([$id]);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+
+    return auth_map_user_row($row);
+}
+
+/**
+ * @return array{0:bool,1:?string}
+ */
+function auth_update_user_display_name(int $userId, string $displayName): array
+{
+    $displayName = trim($displayName);
+    if ($displayName === '') {
+        return [false, 'Name is required.'];
+    }
+    if (strlen($displayName) > 100) {
+        return [false, 'Name is too long.'];
+    }
+
+    try {
+        db()->prepare('UPDATE auth_users SET display_name = ? WHERE id = ?')->execute([$displayName, $userId]);
+    } catch (Throwable) {
+        return [false, 'Could not save name — run php scripts/migrate.php'];
+    }
+
+    return [true, null];
+}
+
+function auth_verify_user_password(int $userId, string $password): bool
+{
+    $row = auth_fetch_user_by_id($userId);
+
+    return $row !== null && password_verify($password, $row['password_hash']);
+}
+
+/**
+ * @return array{0:bool,1:?string}
+ */
+function auth_update_user_email(int $userId, string $email): array
+{
+    $email = auth_normalize_email($email);
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return [false, 'A valid email is required.'];
+    }
+
+    $pdo = db();
+    $dup = $pdo->prepare('SELECT id FROM auth_users WHERE LOWER(TRIM(email)) = ? AND id <> ? LIMIT 1');
+    $dup->execute([$email, $userId]);
+    if ($dup->fetchColumn()) {
+        return [false, 'That email is already used by another account.'];
+    }
+
+    try {
+        $pdo->prepare('UPDATE auth_users SET email = ? WHERE id = ?')->execute([$email, $userId]);
+    } catch (Throwable) {
+        return [false, 'Could not save email — run migrations (auth_users.email).'];
+    }
+
+    return [true, null];
+}
+
+/**
+ * @return array{0:bool,1:?string}
+ */
+function auth_update_user_password(int $userId, string $newPassword): array
+{
+    if (strlen($newPassword) < 8) {
+        return [false, 'Password must be at least 8 characters.'];
+    }
+
+    $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+    if ($hash === false) {
+        return [false, 'Failed to hash password.'];
+    }
+
+    $pdo = db();
+    $pdo->prepare('UPDATE auth_users SET password_hash = ? WHERE id = ?')->execute([$hash, $userId]);
+
+    return [true, null];
+}
+
+/**
+ * Update sign-in email and/or password for a portal user.
+ *
+ * @return array{0:bool,1:?string}
+ */
+function auth_update_portal_login(
+    int $userId,
+    string $email,
+    ?string $newPassword,
+    ?string $currentPasswordForSelf = null,
+    ?string $displayName = null,
+): array {
+    $row = auth_fetch_user_by_id($userId);
+    if ($row === null) {
+        return [false, 'Account not found.'];
+    }
+
+    if ($currentPasswordForSelf !== null && !auth_verify_user_password($userId, $currentPasswordForSelf)) {
+        return [false, 'Current password is incorrect.'];
+    }
+
+    if ($displayName !== null) {
+        [$okName, $errName] = auth_update_user_display_name($userId, $displayName);
+        if (!$okName) {
+            return [false, $errName];
+        }
+    }
+
+    [$ok, $err] = auth_update_user_email($userId, $email);
+    if (!$ok) {
+        return [false, $err];
+    }
+
+    if ($newPassword !== null && $newPassword !== '') {
+        return auth_update_user_password($userId, $newPassword);
+    }
+
+    return [true, null];
 }
 
 /**
@@ -109,14 +320,14 @@ function auth_fetch_user_row(string $username): ?array
  *
  * @return array{id: int, username: string, role: string, email: ?string}|null
  */
-function auth_verify_portal_credentials(string $username, string $password): ?array
+function auth_verify_portal_credentials(string $email, string $password): ?array
 {
-    $username = trim($username);
-    if ($username === '' || $password === '') {
+    $email = auth_normalize_email($email);
+    if ($email === '' || $password === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         return null;
     }
 
-    $row = auth_fetch_user_row($username);
+    $row = auth_fetch_user_by_email($email);
     if ($row === null) {
         return null;
     }
@@ -134,13 +345,14 @@ function auth_verify_portal_credentials(string $username, string $password): ?ar
     return [
         'id' => $row['id'],
         'username' => $row['username'],
+        'display_name' => $row['display_name'] ?? auth_resolve_display_name($row),
         'role' => $role,
         'email' => $row['email'],
     ];
 }
 
 /**
- * @param array{id: int, username: string, role: string, email?: ?string} $row
+ * @param array{id: int, username: string, role: string, email?: ?string, display_name?: ?string} $row
  */
 function auth_begin_pending_2fa(array $row): void
 {
@@ -153,6 +365,23 @@ function auth_begin_pending_2fa(array $row): void
     $_SESSION['pending_2fa_auth'] = [
         'id' => (int)$row['id'],
         'username' => (string)$row['username'],
+        'display_name' => auth_resolve_display_name($row),
+        'role' => (string)$row['role'],
+    ];
+}
+
+/**
+ * @param array{id: int, username: string, role: string, email?: ?string, display_name?: ?string} $row
+ */
+function auth_establish_portal_session(array $row): void
+{
+    auth_start_session();
+    auth_clear_pending_2fa();
+    session_regenerate_id(true);
+    $_SESSION['auth'] = [
+        'id' => (int)$row['id'],
+        'username' => (string)$row['username'],
+        'display_name' => auth_resolve_display_name($row),
         'role' => (string)$row['role'],
     ];
 }
@@ -165,13 +394,7 @@ function auth_complete_pending_2fa(): bool
     }
 
     $pending = $_SESSION['pending_2fa_auth'];
-    session_regenerate_id(true);
-    $_SESSION['auth'] = [
-        'id' => (int)($pending['id'] ?? 0),
-        'username' => (string)($pending['username'] ?? ''),
-        'role' => (string)($pending['role'] ?? ''),
-    ];
-    auth_clear_pending_2fa();
+    auth_establish_portal_session($pending);
 
     return auth_is_portal_user();
 }
@@ -213,9 +436,9 @@ function auth_require_hold_manager(): void
     }
 }
 
-function auth_login(string $username, string $password): bool
+function auth_login(string $email, string $password): bool
 {
-    $row = auth_verify_portal_credentials($username, $password);
+    $row = auth_verify_portal_credentials($email, $password);
     if ($row === null) {
         return false;
     }
@@ -225,24 +448,25 @@ function auth_login(string $username, string $password): bool
     $_SESSION['auth'] = [
         'id' => $row['id'],
         'username' => $row['username'],
+        'display_name' => auth_resolve_display_name($row),
         'role' => $row['role'],
     ];
 
     return true;
 }
 
-function auth_login_portal_user(string $username, string $password): bool
+function auth_login_portal_user(string $email, string $password): bool
 {
-    if (!auth_login($username, $password)) {
+    if (!auth_login($email, $password)) {
         return false;
     }
 
     return auth_is_portal_user();
 }
 
-function auth_login_admin(string $username, string $password): bool
+function auth_login_admin(string $email, string $password): bool
 {
-    if (!auth_login($username, $password)) {
+    if (!auth_login($email, $password)) {
         return false;
     }
 
@@ -254,17 +478,21 @@ function auth_login_admin(string $username, string $password): bool
  *
  * @return array{0:bool,1:?string}
  */
-function auth_create_admin(string $username, string $password): array
+function auth_create_admin(string $email, string $password, ?string $username = null): array
 {
-    return auth_create_user_with_role($username, $password, 'admin');
+    return auth_create_user_with_role($email, $password, 'admin', $username);
 }
 
 /**
  * @return array{0:bool,1:?string}
  */
-function auth_create_user_with_role(string $username, string $password, string $role): array
+function auth_create_user_with_role(string $email, string $password, string $role, ?string $username = null): array
 {
-    $username = trim($username);
+    $email = auth_normalize_email($email);
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return [false, 'A valid email is required.'];
+    }
+    $username = $username !== null ? trim($username) : auth_username_from_email($email);
     if ($username === '') {
         return [false, 'Username is required.'];
     }
@@ -285,14 +513,29 @@ function auth_create_user_with_role(string $username, string $password, string $
 
     $pdo = db();
     try {
-        $stmt = $pdo->prepare('INSERT INTO auth_users (username, password_hash, role) VALUES (?, ?, ?)');
-        $stmt->execute([$username, $hash, $role]);
+        $stmt = $pdo->prepare('INSERT INTO auth_users (username, email, password_hash, role) VALUES (?, ?, ?, ?)');
+        $stmt->execute([$username, $email, $hash, $role]);
     } catch (PDOException $e) {
         if ($e->getCode() === '23000' || (isset($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062)) {
+            if (auth_fetch_user_by_email($email) !== null) {
+                return [false, 'That email is already registered.'];
+            }
+
             return [false, 'That username is already taken.'];
         }
 
         return [false, 'Failed to create user.'];
+    } catch (Throwable) {
+        try {
+            $stmt = $pdo->prepare('INSERT INTO auth_users (username, password_hash, role) VALUES (?, ?, ?)');
+            $stmt->execute([$username, $hash, $role]);
+        } catch (PDOException $e) {
+            if ($e->getCode() === '23000' || (isset($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062)) {
+                return [false, 'That username is already taken.'];
+            }
+
+            return [false, 'Failed to create user. Run php scripts/migrate.php.'];
+        }
     }
 
     return [true, null];

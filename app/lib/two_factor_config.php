@@ -13,13 +13,15 @@ function twofa_config(): array
     }
 
     $defaults = [
+        'portal_2fa_enabled' => false,
+        'dev_log_otp' => false,
         'smtp_host' => '',
         'smtp_port' => 587,
         'smtp_encryption' => 'tls',
         'smtp_username' => '',
         'smtp_password' => '',
         'from_email' => '',
-        'from_name' => 'Northbridge College Admin',
+        'from_name' => 'Northbridge College',
         'otp_expiry_minutes' => 5,
     ];
 
@@ -28,10 +30,19 @@ function twofa_config(): array
         $local = require $path;
         if (is_array($local)) {
             $cfg = array_merge($defaults, $local);
-            $cfg = twofa_config_apply_env($cfg);
-
-            return $cfg;
         }
+    }
+    $localPath = __DIR__ . '/../config/2fa_config.local.php';
+    if (is_file($localPath)) {
+        $extra = require $localPath;
+        if (is_array($extra)) {
+            $cfg = array_merge($cfg ?? $defaults, $extra);
+        }
+    }
+    if (isset($cfg) && is_array($cfg)) {
+        $cfg = twofa_config_apply_env($cfg);
+
+        return $cfg;
     }
 
     $cfg = twofa_config_apply_env($defaults);
@@ -66,6 +77,11 @@ function twofa_config_apply_env(array $cfg): array
         } else {
             $cfg[$key] = (string)$val;
         }
+    }
+
+    $twofaEnv = getenv('PORTAL_2FA_ENABLED');
+    if ($twofaEnv !== false && $twofaEnv !== '') {
+        $cfg['portal_2fa_enabled'] = in_array(strtolower($twofaEnv), ['1', 'true', 'yes', 'on'], true);
     }
 
     return $cfg;

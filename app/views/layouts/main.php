@@ -47,7 +47,7 @@
     <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/app.css')) ?>" />
     <link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/theme.css')) ?>" />
   </head>
-  <body class="min-h-full bg-white text-slate-900 antialiased selection:bg-fuchsia-500/30 selection:text-white dark:bg-[#0a0f1f] dark:text-slate-100">
+  <body class="nb-site min-h-full bg-slate-50 text-slate-900 antialiased selection:bg-fuchsia-500/30 selection:text-fuchsia-950 dark:bg-[#0a0f1f] dark:text-slate-100 dark:selection:bg-fuchsia-500/30 dark:selection:text-white">
     <a class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 rounded-lg bg-violet-950 px-3 py-2 text-sm font-medium text-cyan-100 ring-1 ring-fuchsia-500/40" href="#main">
       Skip to content
     </a>

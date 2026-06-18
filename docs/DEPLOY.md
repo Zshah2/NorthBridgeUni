@@ -31,10 +31,13 @@ Set these in your host’s dashboard (App Platform, Elastic Beanstalk, Lightsail
 
 Aliases also supported: `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`.
 
-### Email OTP (2FA) — required for staff login
+### Email OTP (2FA)
+
+Enable on production:
 
 | Variable | Example |
 |----------|---------|
+| `PORTAL_2FA_ENABLED` | `1` |
 | `SMTP_HOST` | `smtp.gmail.com` |
 | `SMTP_PORT` | `587` |
 | `SMTP_ENCRYPTION` | `tls` or `ssl` |
@@ -77,7 +80,7 @@ Optional data:
 ```bash
 php scripts/import_all.php
 php scripts/seed_demo_registration.php
-php scripts/seed_superadmin.php <username> '<password>' <email@example.com>
+php scripts/seed_superadmin.php <email@example.com> '<password>' [username]
 ```
 
 ---

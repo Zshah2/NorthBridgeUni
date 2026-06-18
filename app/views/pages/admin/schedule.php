@@ -162,7 +162,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
 };
 ?>
 
-<h1 class="text-2xl font-semibold text-slate-900">Master schedule</h1>
+<h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Master schedule</h1>
 <p class="mt-2 text-sm text-slate-600">
   A full directory of <strong class="font-semibold text-slate-800">students and faculty</strong>. Search by ID, name, email, or phone. Row IDs link to the person’s record.
 </p>
@@ -175,11 +175,11 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     Open other admin tools without using the sidebar. Row IDs in the tables below link to a person when available.
   </p>
   <div class="mt-4 flex flex-wrap gap-2">
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars($schedule_href_people) ?>">ID lookup</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Directory</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars($schedule_href_people) ?>">ID lookup</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Directory</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
   </div>
 </details>
 
@@ -192,7 +192,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     </div>
   </div>
 
-  <form id="schedule-filters-form" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
+  <form id="schedule-filters-form" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900" method="get" action="<?= htmlspecialchars($schedule_form_action) ?>">
   <?php if (!empty($schedule_needs_view_hidden)): ?>
     <input type="hidden" name="view" value="schedule" />
   <?php endif; ?>
@@ -330,7 +330,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
     <?php endif; ?>
   </div>
 
-  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
     <table class="min-w-[96rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
@@ -465,7 +465,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
       </nav>
     <?php endif; ?>
   </div>
-  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
     <table class="min-w-[110rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>
@@ -586,7 +586,7 @@ $schedulePaginationPages = static function (int $current, int $last): array {
       </nav>
     <?php endif; ?>
   </div>
-  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div class="mt-3 w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
     <table class="min-w-[124rem] w-full text-left text-sm">
       <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
         <tr>

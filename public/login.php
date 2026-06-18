@@ -40,36 +40,39 @@ if ($isPost && $dbOk) {
         $intent = (string)($_POST['intent'] ?? '');
         $lastIntent = $intent;
         if ($intent === 'login') {
-            $u = trim((string)($_POST['username'] ?? ''));
+            $email = trim((string)($_POST['email'] ?? $_POST['username'] ?? ''));
             $p = (string)($_POST['password'] ?? '');
-            if ($u === '' || $p === '') {
-                $loginError = 'Enter username and password.';
-            } elseif (($row = auth_verify_portal_credentials($u, $p)) !== null) {
+            if ($email === '' || $p === '') {
+                $loginError = 'Enter email and password.';
+            } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $loginError = 'Enter a valid email address.';
+            } elseif (($row = auth_verify_portal_credentials($email, $p)) !== null) {
+                if (!twofa_is_enabled()) {
+                    auth_establish_portal_session($row);
+                    header('Location: ' . url('/admin.php'));
+                    exit;
+                }
                 $pdo = db();
-                $email = trim((string)($row['email'] ?? ''));
-                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $loginError = 'No valid email on file for this account. Ask an admin to set your email under Accounts.';
+                $otpEmail = trim((string)($row['email'] ?? ''));
+                [$sent, $mailErr] = twofa_issue_and_send($pdo, $otpEmail);
+                if (!$sent) {
+                    $loginError = $mailErr ?? 'Could not send verification code.';
                 } else {
-                    [$sent, $mailErr] = twofa_issue_and_send($pdo, $email);
-                    if (!$sent) {
-                        $loginError = $mailErr ?? 'Could not send verification code.';
-                    } else {
-                        auth_begin_pending_2fa($row);
-                        header('Location: ' . url('/verify_otp.php'));
-                        exit;
-                    }
+                    auth_begin_pending_2fa($row);
+                    header('Location: ' . url('/verify_otp.php'));
+                    exit;
                 }
             } else {
-                $loginError = 'Invalid username or password.';
+                $loginError = 'Invalid email or password.';
             }
         } elseif ($intent === 'register') {
-            $u = trim((string)($_POST['username'] ?? ''));
+            $email = trim((string)($_POST['email'] ?? ''));
             $p = (string)($_POST['password'] ?? '');
             $c = (string)($_POST['confirm_password'] ?? '');
             if ($p !== $c) {
                 $registerError = 'Passwords do not match.';
             } else {
-                [$ok, $err] = auth_create_admin($u, $p);
+                [$ok, $err] = auth_create_admin($email, $p);
                 if ($ok) {
                     header('Location: ' . url('/login.php?registered=1'));
                     exit;
@@ -96,7 +99,7 @@ $initialRegister = $registerError !== null
     || (isset($_GET['view']) && (string)$_GET['view'] === 'register')
     || (isset($_GET['register']) && (string)$_GET['register'] !== '0');
 
-$pageTitle = 'Staff sign in — Northbridge College';
+$pageTitle = 'Admin sign in — Northbridge College';
 
 $inputClass = 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-400/20 dark:border-white/10 dark:bg-slate-950/50 dark:text-white dark:placeholder:text-slate-500';
 $alertSuccessClass = 'mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100';
@@ -151,7 +154,7 @@ $alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-
           class="mx-auto h-14 w-14 rounded-2xl object-cover ring-1 ring-slate-200 dark:ring-white/15"
         />
         <h1 class="mt-4 text-2xl font-semibold text-slate-900 dark:text-white">Northbridge College</h1>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Staff portal</p>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Admin portal</p>
       </div>
       <?php if ($registered): ?>
         <div class="<?= htmlspecialchars($alertSuccessClass) ?>">Account created. Sign in below.</div>
@@ -163,10 +166,10 @@ $alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
         <input type="hidden" name="intent" value="login" />
         <div>
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="username">Username</label>
-          <input id="username" name="username" type="text" autocomplete="username" required
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required
             class="<?= htmlspecialchars($inputClass) ?>"
-            placeholder="Username" <?= $dbOk ? '' : 'disabled' ?> />
+            placeholder="you@school.edu" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
         <div>
           <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="password">Password</label>
@@ -201,8 +204,8 @@ $alertWarnClass = 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
         <input type="hidden" name="intent" value="register" />
         <div>
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="reg_username">Username</label>
-          <input id="reg_username" name="username" type="text" required class="<?= htmlspecialchars($inputClass) ?>" <?= $dbOk ? '' : 'disabled' ?> />
+          <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="reg_email">Email</label>
+          <input id="reg_email" name="email" type="email" autocomplete="email" required class="<?= htmlspecialchars($inputClass) ?>" placeholder="you@school.edu" <?= $dbOk ? '' : 'disabled' ?> />
         </div>
         <div>
           <label class="text-sm font-medium text-slate-700 dark:text-slate-300" for="reg_password">Password</label>

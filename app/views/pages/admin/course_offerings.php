@@ -69,13 +69,13 @@ $courseDetailHref = static function (string $courseId, ?int $sectionId = null) u
     return url('/admin.php?' . http_build_query($q));
 };
 ?>
-<h1 class="text-2xl font-semibold text-slate-900">Courses</h1>
+<h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Courses</h1>
 <p class="mt-2 text-sm text-slate-600">
   Scheduled sections for the selected term: course, credits, instructor, meeting pattern, and enrollment.
   For the student and faculty directory (ID search), use <a class="font-semibold text-indigo-700 hover:underline" href="<?= htmlspecialchars(url('/admin.php?view=schedule')) ?>">Master schedule</a>.
 </p>
 
-<div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+<div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
   <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
     <input type="hidden" name="view" value="courses" />
     <div class="sm:w-56">
@@ -116,7 +116,7 @@ $courseDetailHref = static function (string $courseId, ?int $sectionId = null) u
   </form>
 </div>
 
-<div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+<div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
   <div class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="text-sm font-semibold text-slate-800">
       Sections

@@ -1,8 +1,8 @@
 ## Northbridge College (CollegeWeb)
 
-PHP + MySQL (PDO) + Tailwind. Public site uses the front controller (`public/index.php`); **staff** use **`public/login.php`** and the unified **`public/admin.php`** dashboard.
+PHP + MySQL (PDO) + Tailwind. Public site uses the front controller (`public/index.php`); **admins** use **`public/login.php`** and the unified **`public/admin.php`** dashboard.
 
-### Staff accounts (local only)
+### Admin accounts (local only)
 
 Demo usernames and passwords are **not** stored in this repo. After cloning, copy `docs/LOGIN_CREDENTIALS.txt.example` → `docs/LOGIN_CREDENTIALS.txt` and fill in values for your machine (that file is gitignored).
 
@@ -41,14 +41,14 @@ php scripts/seed_full_catalog.php
 php scripts/fix_duplicate_course_enrollments.php
 # If two sections of the same course_id (e.g. BIO110) are enrolled/waitlisted for one student in one term, drops extras (keeps enrolled over waitlist, then earliest enrollment_id). Use --dry-run first.
 
-# Staff portal users — use your own passwords (see docs/LOGIN_CREDENTIALS.txt.example)
-php scripts/seed_superadmin.php <username> <password>
+# Admin portal users — use your own passwords (see docs/LOGIN_CREDENTIALS.txt.example)
+php scripts/seed_superadmin.php <email> <password> [username]
 php scripts/seed_limited_admin.php <username> <password>
 php scripts/seed_staff.php
 
 composer install
 cp app/config/2fa_config.php.example app/config/2fa_config.php
-# Edit 2fa_config.php (SMTP). Set staff emails in Admin → Accounts for email OTP 2FA on login.
+# Edit 2fa_config.php (SMTP). Set sign-in emails in Admin → Accounts or Settings.
 ```
 
 Optional: `APP_DEBUG=1` for verbose errors during development.
@@ -58,7 +58,7 @@ Staff sign-in uses **email OTP 2FA** after password (`SMTP_*` env vars on cloud 
 ### URLs
 
 - **Marketing / home:** `/` (via `public/index.php` + router)
-- **Staff login:** `public/login.php` (direct file — works with PhpStorm built-in server)
+- **Admin sign-in:** `public/login.php` (direct file — works with PhpStorm built-in server)
 - **Admin dashboard:** `public/admin.php` — People lookup, master schedule, directory, registration (add/drop with holds / conflicts / credits / prereqs / waitlist)
 
 ### Built-in server

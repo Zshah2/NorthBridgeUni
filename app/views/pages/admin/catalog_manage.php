@@ -11,10 +11,10 @@ $editCourse = $editCourse ?? null;
 $editPrereqs = $editPrereqs ?? [];
 $allCourseIds = $allCourseIds ?? [];
 ?>
-<h1 class="text-2xl font-semibold text-slate-900">Course catalog</h1>
+<h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Course catalog</h1>
 <p class="mt-2 text-sm text-slate-600">Create and edit catalog courses, departments, and prerequisites. Sections (schedule, capacity per offering) are managed under <strong class="font-semibold">Courses</strong> (master schedule).</p>
 
-<div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+<div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
   <h2 class="text-sm font-semibold text-slate-900"><?= $editCourse ? 'Edit course' : 'Add course' ?></h2>
   <form class="mt-4 grid gap-4 md:grid-cols-2" method="post" action="<?= htmlspecialchars(url('/admin.php?view=catalog')) ?>">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
@@ -58,7 +58,7 @@ $allCourseIds = $allCourseIds ?? [];
 </div>
 
 <?php if ($editCourse): ?>
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
     <h2 class="text-sm font-semibold text-slate-900">Prerequisites for <?= htmlspecialchars((string)$editCourse['course_id']) ?></h2>
     <p class="mt-1 text-xs text-slate-500">Select courses that must be completed (with a passing grade) before enrolling in this course.</p>
     <form class="mt-4" method="post" action="<?= htmlspecialchars(url('/admin.php?view=catalog&edit=' . rawurlencode((string)$editCourse['course_id']))) ?>">
@@ -83,7 +83,7 @@ $allCourseIds = $allCourseIds ?? [];
   </div>
 <?php endif; ?>
 
-<div class="mt-8 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+<div class="mt-8 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
   <table class="min-w-full text-left text-sm">
     <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
       <tr>

@@ -10,6 +10,7 @@ app/config/database.local.php
 
 # SMTP / 2FA (copy from 2fa_config.php.example)
 app/config/2fa_config.php
+app/config/2fa_config.local.php
 
 # Local login reference (copy from docs/LOGIN_CREDENTIALS.txt.example)
 docs/LOGIN_CREDENTIALS.txt

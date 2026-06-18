@@ -50,7 +50,7 @@ function handler_admin_login_form(array $params): void
     if (auth_is_portal_user()) {
         redirect('/admin.php');
     }
-    // Staff sign-in lives on the real file public/login.php (clean URL under PhpStorm, etc.).
+    // Admin sign-in lives on the real file public/login.php (clean URL under PhpStorm, etc.).
     header('Location: ' . url('/login.php'), true, 302);
     exit;
 }
@@ -60,17 +60,17 @@ function handler_admin_login_submit(array $params): void
     global $app;
     csrf_require_valid();
 
-    $username = trim((string)($_POST['username'] ?? ''));
+    $email = trim((string)($_POST['email'] ?? $_POST['username'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
 
-    $ok = $username !== '' && $password !== '' && auth_login_portal_user($username, $password);
+    $ok = $email !== '' && $password !== '' && auth_login_portal_user($email, $password);
     if ($ok) {
         redirect('/admin.php');
     }
 
     render('pages/admin/login.php', [
         'app' => $app,
-        'error' => 'Invalid username or password.',
+        'error' => 'Invalid email or password.',
         'csrf' => csrf_token(),
         'pageTitle' => 'Sign in',
     ], 'layouts/main.php');
@@ -99,7 +99,7 @@ function handler_admin_signup_submit(array $params): void
         redirect('/admin.php');
     }
 
-    $username = trim((string)($_POST['username'] ?? ''));
+    $email = trim((string)($_POST['email'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
     $confirm = (string)($_POST['confirm_password'] ?? '');
 
@@ -114,7 +114,7 @@ function handler_admin_signup_submit(array $params): void
         return;
     }
 
-    [$ok, $err] = auth_create_admin($username, $password);
+    [$ok, $err] = auth_create_admin($email, $password);
     if (!$ok) {
         render('pages/admin/signup.php', [
             'app' => $app,
