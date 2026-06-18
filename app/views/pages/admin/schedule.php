@@ -167,18 +167,13 @@ $schedulePaginationPages = static function (int $current, int $last): array {
   A full directory of <strong class="font-semibold text-slate-800">students and faculty</strong>. Search by ID, name, email, or phone. Row IDs link to the person’s record.
 </p>
 
-<details class="group mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 shadow-sm open:ring-1 open:ring-indigo-100">
-  <summary class="cursor-pointer list-none text-sm font-semibold text-indigo-950 [&::-webkit-details-marker]:hidden">
-    Admin shortcuts — update records, registration, directory
+<details class="group mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 shadow-sm open:ring-1 open:ring-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/30">
+  <summary class="cursor-pointer list-none text-sm font-semibold text-indigo-950 dark:text-indigo-100 [&::-webkit-details-marker]:hidden">
+    Quick links
   </summary>
-  <p class="mt-3 text-xs text-slate-600">
-    Open other admin tools without using the sidebar. Row IDs in the tables below link to a person when available.
-  </p>
   <div class="mt-4 flex flex-wrap gap-2">
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars($schedule_href_people) ?>">ID lookup</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=registration')) ?>">Registration</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=enrollment')) ?>">Directory</a>
-    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>">Dashboard</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin/students/search')) ?>">ID lookup</a>
+    <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin')) ?>">Dashboard</a>
     <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" href="<?= htmlspecialchars(url('/admin/holds')) ?>">Holds</a>
   </div>
 </details>

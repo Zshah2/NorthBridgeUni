@@ -8,7 +8,6 @@ bootstrap_app();
 require __DIR__ . '/../app/lib/url.php';
 require __DIR__ . '/../app/lib/db.php';
 require __DIR__ . '/../app/lib/auth.php';
-require __DIR__ . '/../app/lib/two_factor.php';
 require __DIR__ . '/../app/lib/csrf.php';
 
 header('Content-Type: text/html; charset=utf-8');
@@ -25,7 +24,7 @@ try {
 auth_start_session();
 
 if ($dbOk && auth_is_portal_user() && !$isPost) {
-    header('Location: ' . url('/admin.php'));
+    header('Location: ' . url('/admin'));
     exit;
 }
 
@@ -47,21 +46,9 @@ if ($isPost && $dbOk) {
             } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $loginError = 'Enter a valid email address.';
             } elseif (($row = auth_verify_portal_credentials($email, $p)) !== null) {
-                if (!twofa_is_enabled()) {
-                    auth_establish_portal_session($row);
-                    header('Location: ' . url('/admin.php'));
-                    exit;
-                }
-                $pdo = db();
-                $otpEmail = trim((string)($row['email'] ?? ''));
-                [$sent, $mailErr] = twofa_issue_and_send($pdo, $otpEmail);
-                if (!$sent) {
-                    $loginError = $mailErr ?? 'Could not send verification code.';
-                } else {
-                    auth_begin_pending_2fa($row);
-                    header('Location: ' . url('/verify_otp.php'));
-                    exit;
-                }
+                auth_establish_portal_session($row);
+                header('Location: ' . url('/admin'));
+                exit;
             } else {
                 $loginError = 'Invalid email or password.';
             }

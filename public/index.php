@@ -79,7 +79,7 @@ function route_match(array $route, string $method, string $path): bool
 
 $handlerMap = [
     'home' => 'handler_home',
-    '   health' => 'handler_health',
+    'health' => 'handler_health',
     'admin_login_form' => 'handler_admin_login_form',
     'admin_login_submit' => 'handler_admin_login_submit',
     'admin_signup_form' => 'handler_admin_signup_form',

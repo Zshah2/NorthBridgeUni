@@ -47,19 +47,17 @@ php scripts/seed_limited_admin.php <username> <password>
 php scripts/seed_staff.php
 
 composer install
-cp app/config/2fa_config.php.example app/config/2fa_config.php
-# Edit 2fa_config.php (SMTP). Set sign-in emails in Admin → Accounts or Settings.
 ```
 
 Optional: `APP_DEBUG=1` for verbose errors during development.
 
-Staff sign-in uses **email OTP 2FA** after password (`SMTP_*` env vars on cloud hosts, or `app/config/2fa_config.php` locally).
+Staff sign-in is **email + password** (no 2FA for now). Optional email OTP can be enabled later via `portal_2fa_enabled` in `app/config/2fa_config.php`.
 
 ### URLs
 
 - **Marketing / home:** `/` (via `public/index.php` + router)
 - **Admin sign-in:** `public/login.php` (direct file — works with PhpStorm built-in server)
-- **Admin dashboard:** `public/admin.php` — People lookup, master schedule, directory, registration (add/drop with holds / conflicts / credits / prereqs / waitlist)
+- **Admin dashboard:** `/admin` — ID lookup, schedule, holds
 
 ### Built-in server
 
@@ -73,7 +71,7 @@ Then open `http://localhost:8000/` and `http://localhost:8000/login.php`.
 
 - PHP 8+
 - MySQL 8+ (or compatible)
-- [Composer](https://getcomposer.org/) (for PHPMailer / email OTP)
+- [Composer](https://getcomposer.org/) (optional; only needed if you enable email OTP later)
 
 ### Deploy (DigitalOcean, AWS, VPS)
 

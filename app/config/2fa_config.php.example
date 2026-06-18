@@ -7,8 +7,8 @@
 declare(strict_types=1);
 
 return [
-    'portal_2fa_enabled' => true,
-    // true = no SMTP needed locally; code shown on verify_otp.php and storage/logs/otp.log
+    // false by default; set true + SMTP when you want email OTP after password.
+    'portal_2fa_enabled' => false,
     'dev_log_otp' => false,
 
     'smtp_host' => 'smtp.office365.com', // or smtp.gmail.com

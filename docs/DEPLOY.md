@@ -31,9 +31,9 @@ Set these in your host’s dashboard (App Platform, Elastic Beanstalk, Lightsail
 
 Aliases also supported: `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`.
 
-### Email OTP (2FA)
+### Email OTP (2FA) — optional, off by default
 
-Enable on production:
+Sign-in is **email + password** unless you enable 2FA. To turn on email OTP later:
 
 | Variable | Example |
 |----------|---------|
@@ -135,8 +135,8 @@ Root `public/`; pass PHP to FPM. Static files served directly.
 
 1. Public home loads (`/`)
 2. `login.php` — no “Cannot connect to MySQL”
-3. Staff login → OTP email → `verify_otp.php` → `admin.php`
-4. Admin → Accounts: set staff emails for 2FA
+3. Staff login with email + password → `/admin`
+4. (Optional, when 2FA enabled) OTP email → `verify_otp.php`
 
 ---
 

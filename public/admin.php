@@ -42,6 +42,11 @@ if (!in_array($view, $validViews, true)) {
     $view = 'dashboard';
 }
 
+if ($view === 'dashboard') {
+    header('Location: ' . url('/admin'));
+    exit;
+}
+
 $peopleIdRaw = trim((string)($_GET['id'] ?? ''));
 $peopleId = ctype_digit($peopleIdRaw) ? (int)$peopleIdRaw : null;
 
@@ -1581,7 +1586,7 @@ function nav_group_label(string $label): string
     <div class="mx-auto max-w-[min(100vw-2rem,110rem)] px-3 py-3 sm:px-5">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
         <div class="flex min-w-0 flex-1 items-center justify-between gap-3 lg:justify-start lg:gap-4">
-          <a href="<?= htmlspecialchars(url('/admin.php?view=dashboard')) ?>" class="flex min-w-0 items-center gap-3">
+          <a href="<?= htmlspecialchars(url('/admin')) ?>" class="flex min-w-0 items-center gap-3">
             <img
               src="<?= htmlspecialchars(url('/assets/img/northbridge_university_icon.svg')) ?>"
               alt=""
@@ -1629,7 +1634,7 @@ function nav_group_label(string $label): string
         <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
           <?php require __DIR__ . '/../app/views/partials/theme_toggle.php'; ?>
           <a
-            href="<?= htmlspecialchars(url('/admin.php?view=dashboard#admin-alerts')) ?>"
+            href="<?= htmlspecialchars(url('/admin')) ?>"
             class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             title="Alerts and items needing attention"
           >
@@ -1684,31 +1689,18 @@ function nav_group_label(string $label): string
       </div>
       <div class="flex-1 overflow-y-auto px-5 py-5">
         <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
-        <nav class="mt-4 space-y-1 text-sm">
-          <?= nav_item(url('/admin.php?view=dashboard'), 'Dashboard', $view === 'dashboard') ?>
-          <?= nav_group_label('People & directory') ?>
-          <?= nav_item(url('/admin.php?view=people'), 'People', $view === 'people') ?>
-          <?= nav_item(url('/admin.php?view=schedule'), 'Master schedule', $view === 'schedule') ?>
-          <?= nav_group_label('Scheduling & enrollment') ?>
-          <?= nav_item(url('/admin.php?view=courses'), 'Courses', $view === 'courses' || $view === 'course') ?>
-          <?= nav_item(url('/admin.php?view=enrollment'), 'Enrollment', $view === 'enrollment') ?>
-          <?= nav_item(url('/admin.php?view=departments'), 'Departments', $view === 'departments') ?>
-          <?= nav_item(url('/admin.php?view=registration'), 'Registration', $view === 'registration') ?>
-          <?php if ($isAdmin): ?>
-            <?= nav_group_label('Catalog & records') ?>
-            <?= nav_item(url('/admin.php?view=catalog'), 'Catalog', $view === 'catalog') ?>
-            <?= nav_item(url('/admin.php?view=terms'), 'Terms', $view === 'terms') ?>
-          <?php endif; ?>
-          <?= nav_group_label('Student & admin') ?>
-          <?= nav_item(url('/admin.php?view=holds'), 'Holds', $view === 'holds') ?>
-          <?php if ($isAdmin): ?>
-            <?= nav_item(url('/admin.php?view=accounts'), 'Accounts', $view === 'accounts') ?>
-          <?php endif; ?>
-          <?= nav_group_label('Insights & preferences') ?>
-          <?= nav_item(url('/admin.php?view=reports'), 'Reports & Analytics', $view === 'reports') ?>
-          <?= nav_item(url('/admin.php?view=messages'), 'Messages', $view === 'messages') ?>
-          <?= nav_item(url('/admin.php?view=settings'), 'Settings', $view === 'settings') ?>
-        </nav>
+        <div class="mt-4">
+          <?php
+          $admin_nav_active = match (true) {
+              $view === 'people' => 'lookup',
+              $view === 'schedule' => 'schedule',
+              $view === 'holds' => 'holds',
+              default => '',
+          };
+          $admin_nav_layout = 'stack';
+          require view_path('partials/admin_portal_nav.php');
+          ?>
+        </div>
         <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="mt-4">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
           <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50 dark:text-rose-300 dark:ring-rose-800 dark:hover:bg-rose-950/50">Log out</button>
@@ -1762,31 +1754,18 @@ function nav_group_label(string $label): string
       <aside id="adminSidebar" class="fixed left-0 top-[6.25rem] z-20 hidden h-[calc(100vh-6.25rem)] w-[18rem] overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-200 ease-out dark:border-slate-800 dark:bg-slate-900 lg:block lg:top-[5.5rem] lg:h-[calc(100vh-5.5rem)]">
         <div class="pr-1">
           <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Navigation</div>
-          <nav class="mt-4 space-y-1 text-sm">
-            <?= nav_item(url('/admin.php?view=dashboard'), 'Dashboard', $view === 'dashboard') ?>
-            <?= nav_group_label('People & directory') ?>
-            <?= nav_item(url('/admin.php?view=people'), 'People', $view === 'people') ?>
-            <?= nav_item(url('/admin.php?view=schedule'), 'Master schedule', $view === 'schedule') ?>
-            <?= nav_group_label('Scheduling & enrollment') ?>
-            <?= nav_item(url('/admin.php?view=courses'), 'Courses', $view === 'courses' || $view === 'course') ?>
-            <?= nav_item(url('/admin.php?view=enrollment'), 'Enrollment', $view === 'enrollment') ?>
-            <?= nav_item(url('/admin.php?view=departments'), 'Departments', $view === 'departments') ?>
-            <?= nav_item(url('/admin.php?view=registration'), 'Registration', $view === 'registration') ?>
-            <?php if ($isAdmin): ?>
-              <?= nav_group_label('Catalog & records') ?>
-              <?= nav_item(url('/admin.php?view=catalog'), 'Catalog', $view === 'catalog') ?>
-              <?= nav_item(url('/admin.php?view=terms'), 'Terms', $view === 'terms') ?>
-            <?php endif; ?>
-            <?= nav_group_label('Student & admin') ?>
-            <?= nav_item(url('/admin.php?view=holds'), 'Holds', $view === 'holds') ?>
-            <?php if ($isAdmin): ?>
-              <?= nav_item(url('/admin.php?view=accounts'), 'Accounts', $view === 'accounts') ?>
-            <?php endif; ?>
-            <?= nav_group_label('Insights & preferences') ?>
-            <?= nav_item(url('/admin.php?view=reports'), 'Reports & Analytics', $view === 'reports') ?>
-            <?= nav_item(url('/admin.php?view=messages'), 'Messages', $view === 'messages') ?>
-            <?= nav_item(url('/admin.php?view=settings'), 'Settings', $view === 'settings') ?>
-          </nav>
+          <div class="mt-4">
+            <?php
+            $admin_nav_active = match (true) {
+                $view === 'people' => 'lookup',
+                $view === 'schedule' => 'schedule',
+                $view === 'holds' => 'holds',
+                default => '',
+            };
+            $admin_nav_layout = 'stack';
+            require view_path('partials/admin_portal_nav.php');
+            ?>
+          </div>
           <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>" class="mt-4">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
             <button type="submit" class="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50 dark:text-rose-300 dark:ring-rose-800 dark:hover:bg-rose-950/50">Log out</button>

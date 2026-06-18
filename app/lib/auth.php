@@ -431,7 +431,7 @@ function auth_require_hold_manager(): void
 {
     auth_require_portal_user();
     if (!auth_can_manage_holds()) {
-        header('Location: ' . url('/admin.php?view=dashboard&msg=forbidden'));
+        header('Location: ' . url('/admin'));
         exit;
     }
 }

@@ -43,7 +43,7 @@ Set `APP_DEBUG=0` (or unset) when demonstrating so errors stay user-safe. Use `A
 
 1. Open `/login` — form loads.
 2. Wrong password — stays on login with “Invalid email or password” (no 500).
-3. Sign in as `admin` / `YourSecurePass123` — redirects to `/admin`.
+3. Sign in as `admin` / `YourSecurePass123` — redirects to `/admin` (simple dashboard).
 4. Logout — returns to `/login`; `/admin` while logged out redirects to `/login`.
 
 ### 3) Student lookup (database)

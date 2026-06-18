@@ -12,7 +12,7 @@ if ($selfName === '') {
 ?>
 <section class="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
   <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Your login</h2>
-  <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Name, email, and password used to sign in. Verification codes go to your email when 2FA is enabled.</p>
+  <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Name, email, and password used to sign in.</p>
   <form class="mt-5 max-w-md space-y-4" method="post" action="<?= htmlspecialchars(url('/admin.php?view=settings')) ?>">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>" />
     <input type="hidden" name="action" value="auth_self_creds_save" />

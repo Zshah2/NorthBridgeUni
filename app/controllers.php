@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/lib/admin_portal.php';
+
 function redirect(string $to): void
 {
     if ($to !== '' && !preg_match('#^[a-z][a-z0-9+.-]*://#i', $to) && str_starts_with($to, '/')) {
@@ -48,7 +50,7 @@ function handler_health(array $params): void
 function handler_admin_login_form(array $params): void
 {
     if (auth_is_portal_user()) {
-        redirect('/admin.php');
+        redirect('/admin');
     }
     // Admin sign-in lives on the real file public/login.php (clean URL under PhpStorm, etc.).
     header('Location: ' . url('/login.php'), true, 302);
@@ -65,7 +67,7 @@ function handler_admin_login_submit(array $params): void
 
     $ok = $email !== '' && $password !== '' && auth_login_portal_user($email, $password);
     if ($ok) {
-        redirect('/admin.php');
+        redirect('/admin');
     }
 
     render('pages/admin/login.php', [
@@ -80,7 +82,7 @@ function handler_admin_signup_form(array $params): void
 {
     global $app;
     if (auth_is_portal_user()) {
-        redirect('/admin.php');
+        redirect('/admin');
     }
     render('pages/admin/signup.php', [
         'app' => $app,
@@ -96,7 +98,7 @@ function handler_admin_signup_submit(array $params): void
     csrf_require_valid();
 
     if (auth_is_portal_user()) {
-        redirect('/admin.php');
+        redirect('/admin');
     }
 
     $email = trim((string)($_POST['email'] ?? ''));
@@ -138,18 +140,27 @@ function handler_admin_logout(array $params): void
 
 function handler_admin_dashboard(array $params): void
 {
+    global $app;
     auth_require_portal_user();
-    redirect('/admin.php');
+    render(
+        'pages/admin/dashboard.php',
+        array_merge(['app' => $app], admin_portal_layout_context('dashboard', 'Dashboard — Northbridge Admin')),
+        'layouts/admin_portal.php'
+    );
 }
 
 function handler_admin_student_search(array $params): void
 {
     global $app;
     auth_require_portal_user();
-    render('pages/admin/student_search.php', [
-        'app' => $app,
-        'student_id' => trim((string)($_GET['student_id'] ?? '')),
-    ], 'layouts/main.php');
+    render(
+        'pages/admin/student_search.php',
+        array_merge(
+            ['app' => $app, 'student_id' => trim((string)($_GET['student_id'] ?? ''))],
+            admin_portal_layout_context('lookup', 'ID lookup — Northbridge Admin')
+        ),
+        'layouts/admin_portal.php'
+    );
 }
 
 function handler_admin_student_show(array $params): void
@@ -224,15 +235,22 @@ function handler_admin_student_show(array $params): void
         }
     }
 
-    render('pages/admin/student_detail.php', [
-        'app' => $app,
-        'student_id' => $studentIdRaw,
-        'student' => $student,
-        'departments' => $departments,
-        'enrollments' => $enrollments,
-        'holds' => $holds,
-        'can_manage_holds' => auth_can_manage_holds(),
-    ], 'layouts/main.php');
+    render(
+        'pages/admin/student_detail.php',
+        array_merge(
+            [
+                'app' => $app,
+                'student_id' => $studentIdRaw,
+                'student' => $student,
+                'departments' => $departments,
+                'enrollments' => $enrollments,
+                'holds' => $holds,
+                'can_manage_holds' => auth_can_manage_holds(),
+            ],
+            admin_portal_layout_context('lookup', 'Student detail — Northbridge Admin')
+        ),
+        'layouts/admin_portal.php'
+    );
 }
 
 function handler_admin_schedule(array $params): void
@@ -242,24 +260,16 @@ function handler_admin_schedule(array $params): void
 
     require_once __DIR__ . '/lib/admin_schedule.php';
 
-    auth_start_session();
-    $portalUser = (string)($_SESSION['auth']['username'] ?? '');
-    $portalRole = auth_is_viewer()
-        ? 'Viewer'
-        : (auth_is_limited() ? 'Limited Admin' : 'Admin');
-
     $state = admin_schedule_state(db(), $_GET);
 
     render(
         'pages/admin/schedule.php',
-        array_merge(['app' => $app], $state, [
-            'pageTitle' => 'Master schedule — Northbridge Admin',
-            'admin_nav_active' => 'schedule',
-            'admin_username' => $portalUser,
-            'admin_role_label' => $portalRole,
-            'csrf' => csrf_token(),
-            'schedule_form_action' => url('/admin/schedule'),
-        ]),
+        array_merge(
+            ['app' => $app],
+            $state,
+            admin_portal_layout_context('schedule', 'Master schedule — Northbridge Admin'),
+            ['schedule_form_action' => url('/admin/schedule')]
+        ),
         'layouts/admin_portal.php'
     );
 }
@@ -268,11 +278,18 @@ function handler_admin_holds_index(array $params): void
 {
     global $app;
     auth_require_portal_user();
-    render('pages/admin/holds_search.php', [
-        'app' => $app,
-        'student_id' => trim((string)($_GET['student_id'] ?? '')),
-        'can_manage_holds' => auth_can_manage_holds(),
-    ], 'layouts/main.php');
+    render(
+        'pages/admin/holds_search.php',
+        array_merge(
+            [
+                'app' => $app,
+                'student_id' => trim((string)($_GET['student_id'] ?? '')),
+                'can_manage_holds' => auth_can_manage_holds(),
+            ],
+            admin_portal_layout_context('holds', 'Holds — Northbridge Admin')
+        ),
+        'layouts/admin_portal.php'
+    );
 }
 
 function handler_admin_holds_show(array $params): void
@@ -312,16 +329,22 @@ function handler_admin_holds_show(array $params): void
         }
     }
 
-    render('pages/admin/holds_show.php', [
-        'app' => $app,
-        'student_id' => $studentIdRaw,
-        'student' => $student,
-        'holds' => $holds,
-        'error' => $error,
-        'csrf' => csrf_token(),
-        'hold_types' => ['Bursar', 'Academic', 'Registration', 'Other'],
-        'can_manage_holds' => auth_can_manage_holds(),
-    ], 'layouts/main.php');
+    render(
+        'pages/admin/holds_show.php',
+        array_merge(
+            [
+                'app' => $app,
+                'student_id' => $studentIdRaw,
+                'student' => $student,
+                'holds' => $holds,
+                'error' => $error,
+                'hold_types' => ['Bursar', 'Academic', 'Registration', 'Other'],
+                'can_manage_holds' => auth_can_manage_holds(),
+            ],
+            admin_portal_layout_context('holds', 'Holds — Northbridge Admin')
+        ),
+        'layouts/admin_portal.php'
+    );
 }
 
 function handler_admin_holds_add(array $params): void

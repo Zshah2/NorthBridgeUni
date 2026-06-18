@@ -29,52 +29,65 @@ $docTitle = isset($pageTitle) && is_string($pageTitle) && $pageTitle !== ''
 </head>
 <body class="nb-staff min-h-full bg-slate-50 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
   <header class="relative border-b border-slate-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-slate-950/80">
-    <div class="mx-auto flex max-w-[min(100vw-2rem,96rem)] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-      <div class="flex items-center gap-3">
-        <span class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white">NB</span>
-        <div>
-          <div class="text-sm font-semibold text-slate-900 dark:text-white">Northbridge Admin</div>
-          <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span><?= htmlspecialchars($admin_username ?? '') ?></span>
-            <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"><?= htmlspecialchars($admin_role_label ?? '') ?></span>
-          </div>
+    <div class="mx-auto max-w-[min(100vw-2rem,110rem)] px-4 py-4 sm:px-6">
+      <div class="flex flex-wrap items-center gap-3 lg:gap-4">
+        <div class="flex min-w-0 flex-1 items-center gap-3 lg:flex-none">
+          <a href="<?= htmlspecialchars(url('/admin')) ?>" class="flex min-w-0 items-center gap-3">
+            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white">NB</span>
+            <div class="min-w-0">
+              <div class="truncate text-sm font-semibold text-slate-900 dark:text-white">Northbridge Admin</div>
+              <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span><?= htmlspecialchars($admin_username ?? '') ?></span>
+                <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"><?= htmlspecialchars($admin_role_label ?? '') ?></span>
+              </div>
+            </div>
+          </a>
         </div>
-      </div>
-      <div class="flex items-center gap-3">
-        <?php require view_path('partials/theme_toggle.php'); ?>
 
-        <a href="<?= htmlspecialchars(url('/')) ?>" class="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Site home</a>
-        <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>">
-          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf ?? '') ?>" />
-          <button type="submit" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10">Log out</button>
-        </form>
+        <?php
+        $admin_nav_layout = 'horizontal';
+        require view_path('partials/admin_portal_nav.php');
+        ?>
+
+        <div class="flex w-full flex-wrap items-center justify-end gap-2 sm:gap-3 lg:ml-auto lg:w-auto">
+          <button
+            type="button"
+            id="admin-nav-open"
+            class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
+            aria-haspopup="dialog"
+            aria-controls="admin-nav-drawer"
+            aria-expanded="false"
+          >
+            <span class="font-mono text-base leading-none" aria-hidden="true">≡</span>
+            Menu
+          </button>
+
+          <?php require view_path('partials/theme_toggle.php'); ?>
+
+          <a href="<?= htmlspecialchars(url('/')) ?>" class="hidden text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white sm:inline">Site home</a>
+          <form method="post" action="<?= htmlspecialchars(url('/logout.php')) ?>">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf ?? '') ?>" />
+            <button type="submit" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10">Log out</button>
+          </form>
+        </div>
       </div>
     </div>
   </header>
 
-  <button
-    type="button"
-    id="admin-nav-open"
-    class="fixed right-5 top-5 z-[90] inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-    aria-haspopup="dialog"
-    aria-controls="admin-nav-drawer"
-    aria-expanded="false"
-  >
-    <span class="font-mono text-base leading-none">≡</span>
-    Menu
-  </button>
-
-  <div id="admin-nav-drawer" class="fixed inset-0 z-[80] hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
+  <div id="admin-nav-drawer" class="fixed inset-0 z-[80] hidden lg:hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
     <div class="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" data-admin-nav-close="1"></div>
-    <div class="absolute right-0 top-0 flex h-full w-[min(22rem,92vw)] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
-      <div class="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
-        <div class="text-sm font-semibold text-slate-900">Navigation</div>
-        <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-200/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" data-admin-nav-close="1">
+    <div class="absolute right-0 top-0 flex h-full w-[min(22rem,92vw)] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+        <div class="text-sm font-semibold text-slate-900 dark:text-white">Navigation</div>
+        <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-200/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800" data-admin-nav-close="1">
           Close
         </button>
       </div>
       <div class="min-h-0 overflow-y-auto p-4">
-        <?php require view_path('partials/admin_portal_sidebar.php'); ?>
+        <?php
+        $admin_nav_layout = 'stack';
+        require view_path('partials/admin_portal_nav.php');
+        ?>
       </div>
     </div>
   </div>

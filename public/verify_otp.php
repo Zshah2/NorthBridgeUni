@@ -22,8 +22,20 @@ try {
 
 auth_start_session();
 
+if (!twofa_is_enabled()) {
+    if (auth_is_portal_user()) {
+        header('Location: ' . url('/admin'));
+        exit;
+    }
+    if (auth_has_pending_2fa()) {
+        auth_clear_pending_2fa();
+    }
+    header('Location: ' . url('/login.php'));
+    exit;
+}
+
 if ($dbOk && auth_is_portal_user()) {
-    header('Location: ' . url('/admin.php'));
+    header('Location: ' . url('/admin'));
     exit;
 }
 
@@ -64,7 +76,7 @@ if ($isPost && $dbOk) {
             $code = (string)($_POST['code'] ?? '');
             $pdo = db();
             if (twofa_verify($pdo, $pendingEmail, $code) && auth_complete_pending_2fa()) {
-                header('Location: ' . url('/admin.php'));
+                header('Location: ' . url('/admin'));
                 exit;
             }
             $verifyError = 'Invalid or expired code. Please try again.';
